@@ -38,10 +38,6 @@
 #define LED_DEFAULT					0
 #define PULLUP						1
 
-#define SPD_SETPT_TASK_PRIO 		17u
-#define SPD_SETPT_STACK_SIZE		1000u
-#define SPD_SETPT_TASK_DLY			100u
-
 #define LED_DRV_TASK_PRIO 			19u
 #define LED_DRV_STACK_SIZE			1000u
 #define	LED_DRV_TASK_DLY			100u
@@ -112,16 +108,7 @@ typedef struct
 //extern GPIO_BTNState_t btn0_state;                        /**< Variable to hold state of button 0*/
 //extern GPIO_BTNState_t btn1_state;         				/**< Variable to hold state of button 1*/
 
-extern OS_TCB speedSetPTTaskTCB;							/**< Button input task control block variable */
-extern OS_TCB LEDDriverTaskTCB;								/**< LED driver task control block variable */
-
-extern CPU_STK speedSetPTTaskStack[SPD_SETPT_STACK_SIZE];	/**< Button input task stack */
-extern CPU_STK LEDDriverTaskStack[LED_DRV_STACK_SIZE]; 		/**< LED driver task stack */
-
 extern GPIO_SpeedSetPT_t setptData;							/**< Setpoint data variable */
-extern OS_MUTEX setptDataMutex;                             /**< Mutex to protect the speed setpoint fifo */
-extern OS_SEM setptFifoSem;                             	/**< Semaphore to signal the speed setpoint task of btn press*/
-extern OS_FLAG_GRP LEDDriverEvent;							/**< Flag grp used to notify the LED driver to change LED state */
 
 // ----- Function Prototypes ------
 /// @brief Initialize LED0 and LED1 on the Pearl Gecko starter kit
@@ -161,18 +148,6 @@ void SetLEDs(LED_Action_t btn_action, LED_Action_t sld_action);
 /// @brief ISR for the even gpio interrupts
 ///
 void GPIO_EVEN_IRQHandler(void);
-
-
-/// @brief Task which monitors the speed of the car
-///
-/// @param[in] pointer to arguments
-void SpeedSetpointTask(void* p_args);
-
-
-/// @brief Task to control warning lights (direction and speed)
-///
-/// @param[in] pointer to arguments
-void LEDDriverTask(void* p_args);
 
 
 #endif /* SRC_HEADER_FILES_GPIO_H_ */

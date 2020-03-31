@@ -18,11 +18,6 @@
 #define POS2					2
 #define POS3					3
 
-#define VEH_DIR_TASK_PRIO 		18u
-#define VEH_DIR_STACK_SIZE		1000u
-#define VEH_DIR_TIME_DLY		100u
-#define VEH_DIR_TMR_CNT			1
-
 #define CNT_ZERO			    0
 #define NO_DLY           		0
 #define SLD_TIMER_CNT			2
@@ -64,11 +59,7 @@ typedef struct
 //extern SLD_SliderPressedState_t sld_rightSideState;			/**< Variable to hold the state of the right side of the slider */
 //extern SLD_SliderPressedState_t sld_leftSideState;   		/**< Variable to hold the state of the left side of the slider */
 
-extern OS_TCB vehicleDirTaskTCB;							/**< Slider input task control block */
-extern CPU_STK vehicleDirTaskStack[VEH_DIR_STACK_SIZE];		/**< Slider input task stack */
 
-extern OS_TMR vehDirTimer;									/**< Vehicle direction task timer */
-extern OS_MUTEX vehDirMutex;								/**< Vehicle direction variable mutex */
 extern SLD_Direction_t vehicleDir;							/**< State variable to keep track of the current vehicle direction */
 
 // ----- Function Prototypes ------
@@ -91,12 +82,6 @@ SLD_SliderPressedState_t SLD_IsPressed(SLD_SliderSide_t side);
 ///
 /// @return Desired state of the LEDs based on slider states
 LED_Action_t SLD_GetSLDAction(SLD_SliderPressedState_t sld_leftSideState, SLD_SliderPressedState_t sld_rightSideState);
-
-
-/// @brief Task to monitor the direction of the car turn as indicated by the touch slider
-///
-/// @param[in] pointer to task arguments
-void VehicleDirectionTask(void* p_args);
 
 
 /// @brief Function called when the timer used to trigger touch slider readings expires

@@ -12,11 +12,6 @@
 //SLD_SliderPressedState_t sld_rightSideState;
 //SLD_SliderPressedState_t sld_leftSideState;
 
-OS_TCB vehicleDirTaskTCB;
-CPU_STK vehicleDirTaskStack[VEH_DIR_STACK_SIZE];
-
-OS_TMR vehDirTimer;
-OS_MUTEX vehDirMutex;
 SLD_Direction_t vehicleDir;
 
 /* Slider Initialize */
@@ -93,41 +88,4 @@ void SLD_TimerCallback(void* p_tmr, void* p_args) {
 
 	OSTaskResume(&vehicleDirTaskTCB, &err);
 	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
-}
-
-/* Vehicle Direction Task */
-void VehicleDirectionTask(void * p_args) {
-
-	RTOS_ERR err;
-	CPU_TS timestamp;
-
-	SLD_Init();       				//Initialize CAPSENSE driver and set initial slider state
-
-	Direction_t prevDir, localDir = SLD_GetDirection();
-
-	//OSTmrStart(&vehDirTimer, &err);	//Start timer
-	//APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
-
-	while(1) {
-		localDir = SLD_GetDirection();
-		OSMutexPend(&vehDirMutex, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);
-		vehicleDir.dir = localDir;										//Get Current direction
-		if(prevDir != localDir && (localDir == HardLeft || localDir == Left)) {
-			vehicleDir.leftCnt++;
-		}
-		else if(prevDir != localDir && (localDir == HardRight || localDir == Right))  {
-			vehicleDir.rightCnt++;
-		}
-		OSMutexPost(&vehDirMutex, OS_OPT_POST_NONE, &err);
-		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
-
-		if(prevDir != localDir) {
-			OSFlagPost(&vehMonFlags, VEH_DIR_FLAG, OS_OPT_POST_FLAG_SET, &err);	//If direction changed signal to vehicle monitor task
-			APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
-		}
-		prevDir = localDir;														//Update local direction variable
-
-		OSTimeDly(100u, OS_OPT_TIME_DLY, &err);
-		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
-	}
 }

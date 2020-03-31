@@ -13,17 +13,8 @@
 #include <stdlib.h>
 
 // Global Variables
-OS_TCB speedSetPTTaskTCB;
-OS_TCB LEDDriverTaskTCB;
-
-CPU_STK speedSetPTTaskStack[SPD_SETPT_STACK_SIZE];
-CPU_STK LEDDriverTaskStack[LED_DRV_STACK_SIZE];
-
 FIFO_SetptFIFO_t setptFifo;
 GPIO_SpeedSetPT_t setptData;
-OS_MUTEX setptDataMutex;
-OS_SEM setptFifoSem;
-OS_FLAG_GRP LEDDriverEvent;
 
 //----- Function Definitions -----
 
@@ -155,86 +146,5 @@ void GPIO_EVEN_IRQHandler(void) {
 	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 
 	OSIntExit();									//Exit ISR
-}
-
-
-/* Button Input Task */
-void SpeedSetpointTask(void* p_args) {
-
-	RTOS_ERR err;
-	PP_UNUSED_PARAM(p_args);       							//Prevent compiler warning.
-	CPU_TS timestamp;
-	struct FIFO_SetptNode_t* node;
-
-	//Initialize setpoint data structure
-	OSMutexPend(&setptDataMutex, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);	//Contend for the mutex
-	setptData.num_dec = 0;									//Initialize setpoint data variable
-	setptData.num_inc = 0;
-	setptData.speed = 40;
-	OSMutexPost(&setptDataMutex, OS_OPT_POST_NONE, &err);		//Release mutex
-
-	GPIO_InitBTNs();										//Enable push buttons
-
-	while(1) {
-		OSSemPend(&setptFifoSem, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);	//Wait to be signaled by button ISR
-		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
-
-		__disable_irq();								//Disable IRQs
-		node = FIFO_Peek(&setptFifo);
-
-		if(node->btn0_state == GPIO_BTNPressed) {			//Button 0 pressed
-			OSMutexPend(&setptDataMutex, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);
-			setptData.speed += 5;							//Increase speed
-			setptData.num_inc++;							//Document increment
-			OSMutexPost(&setptDataMutex, OS_OPT_POST_NONE, &err);
-		}
-		else if(node->btn1_state == GPIO_BTNPressed) {		//Button 1 pressed
-			OSMutexPend(&setptDataMutex, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);
-			setptData.speed -= 5;							//Decrease speed
-			setptData.num_dec++;							//Document decrement
-			OSMutexPost(&setptDataMutex, OS_OPT_POST_NONE, &err);
-		}
-
-		FIFO_Pop(&setptFifo);								//Remove node from the queue
-		__enable_irq();								//Enable IRQs
-
-		OSFlagPost(&vehMonFlags, SPD_SETPT_FLAG, OS_OPT_POST_FLAG_SET, &err);
-	}
-}
-
-
-/* LED Driver Task */
-void LEDDriverTask(void* p_args) {
-
-	RTOS_ERR err;
-	CPU_TS timestamp;
-	PP_UNUSED_PARAM(p_args);       				//Prevent compiler warning.
-
-	GPIO_InitLEDs();							//Enable LEDs
-	OS_FLAGS ledEventFlags;						//Event flags
-
-	while(1) {
-		//Wait for LED event
-		ledEventFlags = OSFlagPend(&LEDDriverEvent, LED_WARN_ALL, 0, OS_OPT_PEND_FLAG_SET_ANY | OS_OPT_PEND_BLOCKING, &timestamp, &err);
-		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
-		OSFlagPost(&LEDDriverEvent, ledEventFlags, OS_OPT_POST_FLAG_CLR, &err);				//Clear flags
-		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
-
-		//Check speed warning light events
-		if(ledEventFlags & LED_WARN_SPD_VIOLATION){
-			GPIO_PinOutSet(LED0_PORT, LED0_PIN);
-		}
-		else if(ledEventFlags & LED_WARN_CLR_SPD_VIOLATION) {
-			GPIO_PinOutClear(LED0_PORT, LED0_PIN);
-		}
-
-		//Check turn warning light flags
-		if(ledEventFlags & LED_WARN_TRN_VIOLATION) {
-			GPIO_PinOutSet(LED1_PORT, LED1_PIN);
-		}
-		else if(ledEventFlags & LED_WARN_CLR_TRN_VIOLATION) {
-			GPIO_PinOutClear(LED1_PORT, LED1_PIN);
-		}
-	}
 }
 
