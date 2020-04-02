@@ -44,10 +44,10 @@
 
 #define LED_DRV_Q_SIZE				10u
 
-#define BTN0_EVENT					(1 << 0u)
-#define BTN1_EVENT					(1 << 1u)
-#define BTN_EVENT_ALL				(BTN0_EVENT | BTN1_EVENT)
-#define BTN_EVENT_NONE				0
+#define BTN0_PRESS					(1 << 0u)
+#define BTN1_PRESS					(1 << 1u)
+#define BTN_FLG_ANY					(BTN0_PRESS | BTN1_PRESS)
+#define BTN_FLG_NONE				0
 
 #define LED_WARN_CLR_FLAGS			0
 #define LED_WARN_SPD_VIOLATION		(1 << 0u)
@@ -105,10 +105,7 @@ typedef struct
 
 
 // ----- Global Variables ------
-//extern GPIO_BTNState_t btn0_state;                        /**< Variable to hold state of button 0*/
-//extern GPIO_BTNState_t btn1_state;         				/**< Variable to hold state of button 1*/
 
-extern GPIO_SpeedSetPT_t setptData;							/**< Setpoint data variable */
 
 // ----- Function Prototypes ------
 /// @brief Initialize LED0 and LED1 on the Pearl Gecko starter kit

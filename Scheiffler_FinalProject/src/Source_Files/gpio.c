@@ -9,12 +9,12 @@
 #include "slider.h"
 #include "gpio.h"
 #include "fifo.h"
+#include "tasks.h"
 #include <common/include/rtos_utils.h>
 #include <stdlib.h>
 
 // Global Variables
 FIFO_SetptFIFO_t setptFifo;
-GPIO_SpeedSetPT_t setptData;
 
 //----- Function Definitions -----
 
@@ -36,8 +36,8 @@ void GPIO_InitBTNs() {
 	GPIO_PinModeSet(BTN0_PORT, BTN0_PIN, gpioModeInputPullFilter, PULLUP);		//Set buttons to input with pullup resistor (pressed means bit is low)
 	GPIO_PinModeSet(BTN1_PORT, BTN1_PIN, gpioModeInputPullFilter, PULLUP);
 
-	GPIO_ExtIntConfig(BTN0_PORT, BTN0_PIN, BTN0_INT, BTN_RISE_EN, BTN_FALL_DIS, true); //Config rising edge interrupt for both buttons
-	GPIO_ExtIntConfig(BTN1_PORT, BTN1_PIN, BTN1_INT, BTN_RISE_EN, BTN_FALL_DIS, true);
+	GPIO_ExtIntConfig(BTN0_PORT, BTN0_PIN, BTN0_INT, BTN_RISE_DIS, BTN_FALL_EN, true); //Config rising edge interrupt for both buttons
+	GPIO_ExtIntConfig(BTN1_PORT, BTN1_PIN, BTN1_INT, BTN_RISE_DIS, BTN_FALL_EN, true);
 
 	NVIC_EnableIRQ(GPIO_EVEN_IRQn);												//Enable interrupt in the NVIC
 }
@@ -129,21 +129,15 @@ void GPIO_EVEN_IRQHandler(void) {
 	for(int i = 0; i < 10000; i++);     		 	//Button Debounce
 
 	RTOS_ERR err;
-	GPIO_BTNState_t btn0State = GPIO_BTNReleased;
-	GPIO_BTNState_t btn1State = GPIO_BTNReleased;
 
 	if(gpioInt & (1 << BTN0_INT)) {					//Set button 0 pressed and released
-		btn0State = GPIO_BTNPressed;
-		btn1State = GPIO_BTNReleased;
+		OSFlagPost(&btnEventFlags, BTN0_PRESS, OS_OPT_POST_FLAG_SET, &err);
+		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
 	}
 	else if(gpioInt & (1 << BTN1_INT)) {			//Set button 1 pressed and released
-		btn0State = GPIO_BTNReleased;
-		btn1State = GPIO_BTNPressed;
+		OSFlagPost(&btnEventFlags, BTN1_PRESS, OS_OPT_POST_FLAG_SET, &err);
+		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
 	}
-
-	FIFO_Append(&setptFifo, btn0State, btn1State);							//Add entry to the FIFO
-	OSSemPost(&setptFifoSem, OS_OPT_POST_1 | OS_OPT_POST_NO_SCHED, &err);	//Signal speed setpoint task to update the speed
-	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 
 	OSIntExit();									//Exit ISR
 }

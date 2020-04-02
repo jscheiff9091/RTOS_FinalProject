@@ -11,7 +11,10 @@
 #include "slider.h"
 
 // ----- Macros -----
-#define VEHST_FLG_CLR		0
+#define DIR_FLG_CLR			0
+#define	DIR_FLG_NONE		0
+
+#define WAYPT_YDIFF			5
 
 // ----- Type Definitions -----
 typedef struct {
@@ -23,7 +26,7 @@ typedef struct {
 }VehSt_T;
 
 // ----- Global Variables
-extern VehSt_T vehState;
+extern VehSt_T vehState;             /**< Variable to hold the current vehicle state */
 
 // ----- Function Prototypes -----
 /// @brief 		Callback for the timer which signals for the road generation task to unblock
