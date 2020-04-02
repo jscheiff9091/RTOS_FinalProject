@@ -9,9 +9,6 @@
 #include <kernel/include/os.h>
 #include  <common/include/rtos_utils.h>
 
-//SLD_SliderPressedState_t sld_rightSideState;
-//SLD_SliderPressedState_t sld_leftSideState;
-
 SLD_Direction_t vehicleDir;
 
 /* Slider Initialize */
@@ -62,6 +59,7 @@ Direction_t SLD_GetDirection(void) {
 	Direction_t ret;
 	OSSchedLock(&err);
 	CAPSENSE_Sense();									//Read the touch slider
+	OSSchedUnlock(&err);
 
 	if(CAPSENSE_getPressed(POS0)){						//Position 0selected?
 		ret = HardLeft;
@@ -78,7 +76,6 @@ Direction_t SLD_GetDirection(void) {
 	else {
 		ret = Straight;
 	}
-	OSSchedUnlock(&err);
 	return ret;
 }
 

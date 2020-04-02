@@ -6,7 +6,10 @@
  */
 
 #include "tasks.h"
+#include "game.h"
 #include "slider.h"
+#include "lcd.h"
+#include "gpio.h"
 
 #include  <cpu/include/cpu.h>
 #include  <common/include/common.h>
@@ -31,7 +34,6 @@ OS_TCB vehStTaskTCB;
 OS_TCB gmMonTaskTCB;
 OS_TCB lcdTaskTCB;
 
-
 //Task stacks
 CPU_STK startTaskStack[START_STACK_SIZE];
 CPU_STK idleTaskStack[IDLE_STACK_SIZE];
@@ -48,13 +50,13 @@ CPU_STK lcdTaskStack[LCD_STACK_SIZE];
 OS_FLAG_GRP vehStFlags;
 OS_FLAG_GRP ledWarnFlags;
 OS_FLAG_GRP lcdFlags;
+OS_FLAG_GRP	btnEventFlags;
 //OS_FLAG_GRP gmSetupFlags;
 
 //Semaphores
 OS_SEM physModSem;
-OS_SEM spdSem;
 OS_SEM gmMonSem;
-OS_SEM gmModeSem;
+//OS_SEM gmModeSem;
 
 //Timers
 OS_TMR dirTmr;
@@ -89,18 +91,25 @@ void StartTask(void* p_arg) {
 
 
 	/**** Create all semaphores used *****/
-	//Create semaphore used to signal a button press occurred to the speed setpoint task
-	OSSemCreate(&setptFifoSem, "Button Press Signal Semaphore", CNT_ZERO, &err);
+	//Create semaphore used to signal that the physics model needs to be updated
+	OSSemCreate(&physModSem, "Physics Model Signal Semaphore", CNT_ZERO, &err);
 	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
 
+	//Create semaphore used to signal the Vehicle state has updated and the game monitor task has to update the game status
+	OSSemCreate(&gmMonSem, "Game Monitor Task Signal Semaphore", CNT_ZERO, &err);
+	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
 
 	/**** Create all Flag groups used ****/
-	//Create event flag group to communicate with the vehicle monitor task
-	OSFlagCreate(&vehMonFlags, "Vehicle Monitor Event Flags", VEH_MON_CLR_FLAGS, &err);
+	//Create event flag group to communicate which vehicle state has been updated
+	OSFlagCreate(&vehStFlags, "Vehicle State Update Event Flags", VEHST_FLG_CLR, &err);
 	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
 
 	//Create the event flag to notify the LED Driver task of LED State change
-	OSFlagCreate(&LEDDriverEvent, "Vehicle Warning Event Flag", LED_WARN_CLR_FLAGS, &err);
+	OSFlagCreate(&ledWarnFlags, "Vehicle Warning Event Flag", LED_WARN_CLR_FLAGS, &err);
+	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
+
+	//Create the event flag to notify that one of the buttons has been pressed
+	OSFlagCreate(&btnEventFlags, "Button Event Flags", BTN_EVENT_NONE, &err);
 	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
 
 
@@ -109,41 +118,26 @@ void StartTask(void* p_arg) {
 	OSMutexCreate(&setptDataMutex, "Speed Setpoint Data Mutex", &err);
 	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
 
-	//Create mutex to protect the vehicle direction state variable
-	OSMutexCreate(&vehDirMutex, "Vehicle Direction Mutex", &err);
-	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
-
 
 	/**** Create all timers used ****/
 	//Create the timer to schedule the vehicle direction task
-	OSTmrCreate(&vehDirTimer,
-				"Vehicle Direction Task Timer",
+	OSTmrCreate(&dirTmr,
+				"Direction Update Task Timer",
 				NO_DLY,
-				VEH_DIR_TMR_CNT,
+				DIR_TMR_CNT,
 				OS_OPT_TMR_PERIODIC,
-				&SLD_TimerCallback,
+				&SLD_DirTimerCallback,
 				DEF_NULL,
 				&err);
 	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
 
 	//Create vehicle turning monitor timeout timer
-	OSTmrCreate(&vehTurnTimeout,
+	OSTmrCreate(&rdGenTmr,
 				"Vehicle Turn Timeout Timer",
-				VEH_TURN_TIMEOUT,
-				0,
+				NO_DLY,
+				RDGEN_TMR_CNT,
 				OS_OPT_TMR_ONE_SHOT,
-				&VehicleTurnTimeout,
-				DEF_NULL,
-				&err);
-	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
-
-	//Create timer to signal the LCD Display to move to the ready queue
-	OSTmrCreate(&LCDDispTmr,
-				"LCD Display Task Timer",
-				0,
-				LCD_TMR_PERIOD,
-				OS_OPT_TMR_PERIODIC,
-				&LCDTmrCallback,
+				&Game_RoadGenerationCallback,
 				DEF_NULL,
 				&err);
 	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
@@ -169,8 +163,8 @@ void StartTask(void* p_arg) {
 
 	//Create slider input task
 	OSTaskCreate(&dirTaskTCB,
-				 "Vehicle Direction Update Task",
-				 VehicleDirectionTask,
+				 "Direction Update Task",
+				 DirectionUpdateTask,
 				 DEF_NULL,
 				 DIR_TASK_PRIO,
 				 &dirTaskStack[0],
@@ -311,7 +305,7 @@ void StartTask(void* p_arg) {
 }
 
 /* Vehicle Direction Task */
-void VehicleDirectionTask(void * p_args) {
+void DirectionUpdateTask(void * p_args) {
 
 	RTOS_ERR err;
 	CPU_TS timestamp;

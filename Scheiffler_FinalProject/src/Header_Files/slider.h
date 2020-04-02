@@ -18,10 +18,6 @@
 #define POS2					2
 #define POS3					3
 
-#define CNT_ZERO			    0
-#define NO_DLY           		0
-#define SLD_TIMER_CNT			2
-
 
 // ----- Typedefs ------
 /// @brief data type to keep track of slider state
@@ -56,10 +52,6 @@ typedef struct
 }SLD_Direction_t;
 
 // ----- Global Variables ------
-//extern SLD_SliderPressedState_t sld_rightSideState;			/**< Variable to hold the state of the right side of the slider */
-//extern SLD_SliderPressedState_t sld_leftSideState;   		/**< Variable to hold the state of the left side of the slider */
-
-
 extern SLD_Direction_t vehicleDir;							/**< State variable to keep track of the current vehicle direction */
 
 // ----- Function Prototypes ------
@@ -88,7 +80,7 @@ LED_Action_t SLD_GetSLDAction(SLD_SliderPressedState_t sld_leftSideState, SLD_Sl
 ///
 /// @param[in] pointer to the timer
 /// @param[in] pointer to any arguments
-void SLD_TimerCallback(void* p_tmr, void* p_args);
+void SLD_DirTimerCallback(void* p_tmr, void* p_args);
 
 
 /// @brief Get direction of the vehicle as indicated by the touch slider

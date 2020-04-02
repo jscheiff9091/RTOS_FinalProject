@@ -8,7 +8,8 @@
 #ifndef TASKS_H_
 #define TASKS_H_
 
-/* Task Macros */
+//----- Macros ----
+// Task Macros
 #define START_TASK_PRIO 		23u
 #define START_STACK_SIZE		1000u
 
@@ -17,6 +18,7 @@
 
 #define RDGEN_TASK_PRIO			23u
 #define RDGEN_STACK_SIZE		1000u
+#define RDGEN_TMR_CNT			100u
 
 #define DIR_TASK_PRIO 			18u
 #define DIR_STACK_SIZE			1000u
@@ -43,6 +45,10 @@
 #define LCD_TASK_PRIO			21u
 #define LCD_STACK_SIZE			1000u
 
+// Miscellaneous macros
+#define CNT_ZERO			    0
+#define NO_DLY           		0
+
 
 //----- Global Variables -----
 extern OS_TCB startTaskTCB;                      /**< Task control block for the start task */
@@ -58,7 +64,7 @@ void RoadGenerateTask(void* p_args);
 /// @brief Task to monitor the direction of the car turn as indicated by the touch slider
 ///
 /// @param[in] pointer to task arguments
-void VehicleDirectionTask(void* p_args);
+void DirectionUpdateTask(void* p_args);
 
 /// @brief Task which updates the physics model of the car.
 ///
