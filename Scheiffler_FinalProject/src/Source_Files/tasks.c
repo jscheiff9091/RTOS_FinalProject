@@ -12,6 +12,8 @@
 #include "gpio.h"
 #include "em_gpio.h"
 
+#include "math.h"
+
 #include  <cpu/include/cpu.h>
 #include  <common/include/common.h>
 #include  <kernel/include/os.h>
@@ -66,6 +68,8 @@ OS_TMR rdGenTmr;
 
 //Mutexes
 OS_MUTEX vehStLock;
+OS_MUTEX physTupLk;
+OS_MUTEX wayPtLock;
 
 /* Start Task */
 void StartTask(void* p_arg) {
@@ -122,6 +126,14 @@ void StartTask(void* p_arg) {
 	/**** Create all mutexs used *****/
 	//Create mutex to protect the speed setpoint data
 	OSMutexCreate(&vehStLock, "Vehicle State Data Mutex", &err);
+	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
+
+	//Create mutex to protect the physics tuple
+	OSMutexCreate(&physTupLk, "Physics Tuple Mutex", &err);
+	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
+
+	//Create mutex to protect waypoint FIFO
+	OSMutexCreate(&wayPtLock, "Waypoint FIFO Mutex", &err);
 	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
 
 
@@ -302,6 +314,29 @@ void StartTask(void* p_arg) {
 	while(1);
 }
 
+/* Waypoint generator task */
+void RoadGenerateTask(void* p_args) {
+	RTOS_ERR err;
+	CPU_TS timestamp;
+
+	bool fifoFull;
+
+	while(1) {
+		fifoFull = false;
+		while(!fifoFull) {
+			OSMutexPend(&wayPtLock, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);
+			if(road.waypoints.totalWayPts == 0 || road.waypoints.currWayPts >= FIFO_CAPACITY) {
+				fifoFull = true;
+			}
+			else {
+
+			}
+			OSMutexPost(&wayPtLock, OS_OPT_POST_NONE, &err);
+			APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+		}
+	}
+}
+
 /* Vehicle Direction Task */
 void DirectionUpdateTask(void * p_args) {
 
@@ -336,6 +371,43 @@ void DirectionUpdateTask(void * p_args) {
 		prevDir = localDir;																//Update local direction variable
 
 		OSTimeDly(100u, OS_OPT_TIME_DLY, &err);											//Wait 100ms
+		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
+	}
+}
+
+/* Physics Model Update Task */
+void PhysicsModelTask(void* p_args) {
+	RTOS_ERR err;
+	CPU_TS timestamp;
+
+	uint16_t cpAccelSd;
+	uint16_t cpAccelFwd;
+	uint16_t cpVel;
+	uint16_t cpPower;
+
+	while(1) {
+		OSMutexPend(&physTupLk, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);		//Make copies of the current data in the tuple
+		cpAccelFwd = vehPhys.accelFwd;
+		cpAccelSd = vehPhys.accelSd;
+		cpVel = vehPhys.velocity;
+		cpPower = vehPhys.power;
+		OSMutexPost(&physTupLk, OS_OPT_POST_NONE, &err);
+		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
+
+		cpAccelFwd = cpPower / cpVel;											//Calculate forward acceleration
+		cpAccelSd = pow(cpVel, 2) / vehSpecs.turnRadius;						//Calculate sideways acceleration
+		cpVel += cpAccelFwd * PHYS_UPDATE_RATE;									//Calculate vehicle velocity
+		cpPower += cpVel * PHYS_UPDATE_RATE;									//Calculate vehicle power
+
+		OSMutexPend(&physTupLk, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);		//Update values in the physics in the tuple
+		vehPhys.accelFwd = cpAccelFwd;
+		vehPhys.accelSd = cpAccelSd;
+		vehPhys.velocity = cpVel;
+		vehPhys.power = cpPower;
+		OSMutexPost(&physTupLk, OS_OPT_POST_NONE, &err);
+		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
+
+		OSTimeDly(PHYS_UPDATE_RATE * 1000, OS_OPT_TIME_DLY, &err);				//Pause for physics update period
 		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
 	}
 }

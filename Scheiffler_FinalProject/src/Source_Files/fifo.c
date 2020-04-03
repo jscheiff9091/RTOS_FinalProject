@@ -29,6 +29,9 @@ void FIFO_Append(WayPtFIFO_t* fifo, int xDiff){
 			fifo->tail->next = newNode;					//Set current tail node to point to new node
 			fifo->tail = newNode;						//Set tail to new node
 		}
+
+		fifo->currWayPts++;
+		fifo->totalWayPts--;
 	}
 }
 
@@ -54,6 +57,7 @@ void FIFO_Pop(WayPtFIFO_t* fifo) {
 		free(fifo->head);									//Free current head of the list
 		fifo->head = next;									//Set new head
 	}
+	fifo->currWayPts--;
 }
 
 

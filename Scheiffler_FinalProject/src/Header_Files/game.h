@@ -17,6 +17,8 @@
 
 #define WAYPT_YDIFF			5
 
+#define PHYS_UPDATE_RATE	.25
+
 // ----- Type Definitions -----
 typedef enum {
 	Truck,
@@ -44,7 +46,8 @@ typedef struct {
 }VehSpecs_t;
 
 typedef struct {
-	uint16_t acceleration;
+	uint16_t accelSd;
+	uint16_t accelFwd;
 	uint16_t velocity;
 	uint16_t power;
 	uint8_t zAccel;
@@ -63,6 +66,7 @@ extern VehSt_T vehState;             	/**< Variable to hold the current vehicle 
 extern VehSpecs_t vehSpecs;				/**< Variable to hold the data related to the vehicle selected */
 extern VehPhys_t vehPhys;				/**< Variable to hold the vehicle physics data */
 extern uint8_t vehSlip;					/**< Slip parameter of the vehicle */
+extern Road_t road;						/**< Variable to hold information about the road */
 
 // ----- Function Prototypes -----
 /// @brief 		Callback for the timer which signals for the road generation task to unblock

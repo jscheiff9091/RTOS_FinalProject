@@ -12,6 +12,9 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+// ----- Macros -----
+#define FIFO_CAPACITY 		30
+
 
 // ----- Data types -----
 /// @brief data type stored in the Setpoint fifo
@@ -29,7 +32,6 @@ typedef struct
 	struct WayPt_t* head;
 	struct WayPt_t* tail;
 	uint8_t currWayPts;
-	uint8_t wayPtsUsed;
 	uint8_t totalWayPts;
 }WayPtFIFO_t;
 
