@@ -13,19 +13,21 @@
 
 //----- FIFO Append -----
 void FIFO_Append(WayPtFIFO_t* fifo, int xDiff){
-	struct WayPt_t* newNode = (struct WayPt_t*) malloc(sizeof(struct WayPt)); //Allocate a new node on the heap
+	struct WayPt_t* newNode = (struct WayPt_t*) malloc(sizeof(struct WayPt_t)); //Allocate a new node on the heap
 
 	if(newNode != NULL) {								//Ensure memory successfully allocated
 
 		newNode->next = NULL;							//Node is at end of the list
-		newNode->xPos = fifo->tail->xPos + xDiff;		//Add x delta to previous waypoint to get this x
-		newNode->yPos = fifo->tail->yPos + WAYPT_YDIFF;	//Next way point is 5m
 
 		if(FIFO_IsEmpty(fifo)) {						//List empty?
+			newNode->xPos = 0;
+			newNode->yPos = 0;
 			fifo->head = newNode;						//First entry, tail and head point to same node
 			fifo->tail = newNode;
 		}
 		else {
+			newNode->xPos = fifo->tail->xPos + xDiff;		//Add x delta to previous waypoint to get this x
+			newNode->yPos = fifo->tail->yPos + WAYPT_YDIFF;	//Next way point is 5m
 			fifo->tail->next = newNode;					//Set current tail node to point to new node
 			fifo->tail = newNode;						//Set tail to new node
 		}

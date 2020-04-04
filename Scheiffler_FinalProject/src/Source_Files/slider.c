@@ -78,11 +78,3 @@ Direction_t SLD_GetDirection(void) {
 	}
 	return ret;
 }
-
-/* Touch slider signal timer */
-void SLD_TimerCallback(void* p_tmr, void* p_args) {
-	RTOS_ERR err;
-
-	OSTaskResume(&vehicleDirTaskTCB, &err);
-	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
-}

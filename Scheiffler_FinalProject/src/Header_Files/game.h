@@ -15,7 +15,11 @@
 #define DIR_FLG_CLR			0
 #define	DIR_FLG_NONE		0
 
+#define XDIFF_HIGH			5
+#define XDIFF_LO			-5
+#define GET_XDIFF			rand() % (XDIFF_HIGH - XDIFF_LO + 1) + XDIFF_LO
 #define WAYPT_YDIFF			5
+
 
 #define PHYS_UPDATE_RATE	.25
 
@@ -61,18 +65,11 @@ typedef struct {
 	WayPtFIFO_t waypoints;
 }Road_t;
 
-// ----- Global Variables
+// ----- Global Variables -----
 extern VehSt_T vehState;             	/**< Variable to hold the current vehicle state */
 extern VehSpecs_t vehSpecs;				/**< Variable to hold the data related to the vehicle selected */
 extern VehPhys_t vehPhys;				/**< Variable to hold the vehicle physics data */
 extern uint8_t vehSlip;					/**< Slip parameter of the vehicle */
 extern Road_t road;						/**< Variable to hold information about the road */
-
-// ----- Function Prototypes -----
-/// @brief 		Callback for the timer which signals for the road generation task to unblock
-///
-/// @param[in] 	Pointer to the timer which has expired
-/// @param[in] 	Pointer to the timer arguments
-void Game_RoadGenerationCallback(void* tmr, void* t_args);
 
 #endif /* GAME_H_ */

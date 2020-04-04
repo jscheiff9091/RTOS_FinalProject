@@ -13,7 +13,7 @@
 #include <stdint.h>
 
 // ----- Macros -----
-#define FIFO_CAPACITY 		30
+#define FIFO_CAPACITY 		10
 
 
 // ----- Data types -----
@@ -31,7 +31,7 @@ typedef struct
 {
 	struct WayPt_t* head;
 	struct WayPt_t* tail;
-	uint8_t currWayPts;
+	int currWayPts;
 	uint8_t totalWayPts;
 }WayPtFIFO_t;
 

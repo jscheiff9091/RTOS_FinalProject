@@ -45,10 +45,6 @@
 #include  <common/include/rtos_utils.h>
 #include  <common/include/toolchains.h>
 
-#include "display.h"
-#include "textdisplay.h"
-#include "retargettextdisplay.h"
-
 #define HFRCO_FREQ 		40000000
 
 /* Main */
@@ -56,7 +52,11 @@ int main(void)
 {
 	KeithGInit();
 
-	CMU_RouteGPIOClock();       //Enable GPIO Clock
+	CMU_RouteGPIOClock();       			//Enable GPIO Clock
+
+	road.waypoints = (WayPtFIFO_t) { .head = NULL, .tail = NULL, .currWayPts = 0, .totalWayPts = 15 };
+	vehState.vehDir = Straight;
+	vehState.speed = 0;
 
 	/* Initialize tasks, OS, etc. */
 	RTOS_ERR err;

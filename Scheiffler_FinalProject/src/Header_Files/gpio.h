@@ -50,13 +50,18 @@
 #define BTN_FLG_NONE				0
 
 #define LED_WARN_CLR_FLAGS			0
-#define LED_WARN_SPD_VIOLATION		(1 << 0u)
-#define LED_WARN_CLR_SPD_VIOLATION	(1 << 1u)
-#define LED_WARN_TRN_VIOLATION		(1 << 2u)
-#define	LED_WARN_CLR_TRN_VIOLATION	(1 << 3u)
-#define LED_WARN_ALL				(LED_WARN_SPD_VIOLATION | LED_WARN_CLR_SPD_VIOLATION | LED_WARN_TRN_VIOLATION | LED_WARN_CLR_TRN_VIOLATION)
+#define TIRE_SLIP_WARN				(1 << 0u)
+#define TIRE_OFF_ROAD				(1 << 1u)
+#define VEH_HEAD_WARN				(1 << 2u)
+#define VEH_OFF_ROAD				(1 << 3u)
+#define TOGGLE_WARN_LED				(1 << 4u)
+#define LED_WARN_ANY				(TIRE_SLIP_WARN | TIRE_OFF_ROAD | VEH_HEAD_WARN | VEH_OFF_ROAD | TOGGLE_WARN_LED)
+#define ANY_EX_HEAD					(TIRE_SLIP_WARN | TIRE_OFF_ROAD | VEH_OFF_ROAD | TOGGLE_WARN_LED)
+#define ANY_EX_SLIP					(TIRE_OFF_ROAD | VEH_HEAD_WARN | VEH_OFF_ROAD | TOGGLE_WARN_LED)
+#define ANY_EX_WARN					(TIRE_OFF_ROAD | VEH_OFF_ROAD | TOGGLE_WARN_LED)
+#define TOGGLE_TIMEOUT				500u
 
-#define NO_TIMEOUT				0
+#define NO_TIMEOUT					0
 
 // ----- Typedefs ------
 /// @brief enumeration to track possible button states
@@ -146,5 +151,10 @@ void SetLEDs(LED_Action_t btn_action, LED_Action_t sld_action);
 ///
 void GPIO_EVEN_IRQHandler(void);
 
+/// @brief Caalback for the LED blink timer
+///
+/// @param[in] Pointer to the timer which is calling the callback fucntion
+/// @param[in] Arguments being passed to the callback
+void LEDToggleTmrCallback(void* tmr, void* args);
 
 #endif /* SRC_HEADER_FILES_GPIO_H_ */

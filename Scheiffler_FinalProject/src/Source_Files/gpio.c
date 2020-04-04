@@ -13,9 +13,6 @@
 #include <common/include/rtos_utils.h>
 #include <stdlib.h>
 
-// Global Variables
-FIFO_SetptFIFO_t setptFifo;
-
 //----- Function Definitions -----
 
 
@@ -140,5 +137,11 @@ void GPIO_EVEN_IRQHandler(void) {
 	}
 
 	OSIntExit();									//Exit ISR
+}
+
+void LEDToggleTmrCallback(void* tmr, void* args) {
+	RTOS_ERR err;
+	OSFlagPost(&ledWarnFlags, TOGGLE_WARN_LED, OS_OPT_POST_FLAG_SET, &err);
+	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
 }
 

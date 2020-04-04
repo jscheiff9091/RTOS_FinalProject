@@ -11,8 +11,18 @@
 #include "lcd.h"
 #include "gpio.h"
 #include "em_gpio.h"
+#include "em_emu.h"
 
-#include "math.h"
+#include "bsp.h"
+#include  <bsp_os.h>
+
+#include <time.h>
+#include <stdlib.h>
+#include <stdio.h>
+
+#include "display.h"
+#include "textdisplay.h"
+#include "retargettextdisplay.h"
 
 #include  <cpu/include/cpu.h>
 #include  <common/include/common.h>
@@ -63,8 +73,7 @@ OS_SEM spdUpdateSem;
 //OS_SEM gmModeSem;
 
 //Timers
-OS_TMR dirTmr;
-OS_TMR rdGenTmr;
+OS_TMR ledToggleTmr;
 
 //Mutexes
 OS_MUTEX vehStLock;
@@ -138,24 +147,13 @@ void StartTask(void* p_arg) {
 
 
 	/**** Create all timers used ****/
-	//Create the timer to schedule the vehicle direction task
-	OSTmrCreate(&dirTmr,
-				"Direction Update Task Timer",
+	//Create intermittent LED warning timer
+	OSTmrCreate(&ledToggleTmr,
+				"LED Toggle Timer",
+				TOGGLE_TIMEOUT,
 				NO_DLY,
-				DIR_TMR_CNT,
-				OS_OPT_TMR_PERIODIC,
-				&SLD_DirTimerCallback,
-				DEF_NULL,
-				&err);
-	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
-
-	//Create vehicle turning monitor timeout timer
-	OSTmrCreate(&rdGenTmr,
-				"Vehicle Turn Timeout Timer",
-				NO_DLY,
-				RDGEN_TMR_CNT,
 				OS_OPT_TMR_ONE_SHOT,
-				&Game_RoadGenerationCallback,
+				&LEDToggleTmrCallback,
 				DEF_NULL,
 				&err);
 	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
@@ -243,37 +241,37 @@ void StartTask(void* p_arg) {
 	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 
 
-	//Create Vehicle State Update task
-	OSTaskCreate(&vehStTaskTCB,
-				 "Vehicle State Update Task",
-				 VehicleStateTask,
-				 DEF_NULL,
-				 VEHST_TASK_PRIO,
-				 &vehStTaskStack[0],
-				 (VEHST_STACK_SIZE / 2u),
-				 VEHST_STACK_SIZE,
-				 0u,
-				 0u,
-				 DEF_NULL,
-				 OS_OPT_TASK_STK_CLR,
-				 &err);
-	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+//	//Create Vehicle State Update task
+//	OSTaskCreate(&vehStTaskTCB,
+//				 "Vehicle State Update Task",
+//				 VehicleStateTask,
+//				 DEF_NULL,
+//				 VEHST_TASK_PRIO,
+//				 &vehStTaskStack[0],
+//				 (VEHST_STACK_SIZE / 2u),
+//				 VEHST_STACK_SIZE,
+//				 0u,
+//				 0u,
+//				 DEF_NULL,
+//				 OS_OPT_TASK_STK_CLR,
+//				 &err);
+//	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 
 	//Create Game Monitor task
-	OSTaskCreate(&gmMonTaskTCB,
-				 "Game Monitor Task",
-				 GameMonitorTask,
-				 DEF_NULL,
-				 GMMON_TASK_PRIO,
-				 &gmMonTaskStack[0],
-				 (GMMON_STACK_SIZE / 2u),
-				 GMMON_STACK_SIZE,
-				 0u,
-				 0u,
-				 DEF_NULL,
-				 OS_OPT_TASK_STK_CLR,
-				 &err);
-	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+//	OSTaskCreate(&gmMonTaskTCB,
+//				 "Game Monitor Task",
+//				 GameMonitorTask,
+//				 DEF_NULL,
+//				 GMMON_TASK_PRIO,
+//				 &gmMonTaskStack[0],
+//				 (GMMON_STACK_SIZE / 2u),
+//				 GMMON_STACK_SIZE,
+//				 0u,
+//				 0u,
+//				 DEF_NULL,
+//				 OS_OPT_TASK_STK_CLR,
+//				 &err);
+//	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 
 
 	//Create LCD Display Task
@@ -320,20 +318,27 @@ void RoadGenerateTask(void* p_args) {
 	CPU_TS timestamp;
 
 	bool fifoFull;
+	time_t t;
+	int xDiff;
+
+	srand(time(&t));																				//Seed random number generator
 
 	while(1) {
 		fifoFull = false;
 		while(!fifoFull) {
-			OSMutexPend(&wayPtLock, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);
-			if(road.waypoints.totalWayPts == 0 || road.waypoints.currWayPts >= FIFO_CAPACITY) {
-				fifoFull = true;
+			OSMutexPend(&wayPtLock, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);						//Lock fifo
+			if(road.waypoints.totalWayPts == 0 || road.waypoints.currWayPts >= FIFO_CAPACITY) {		//Check if waypoints need to be added
+				fifoFull = true;																	//Fifo full or all waypoints for a level have been created
 			}
-			else {
-
+			else {																					//More waypoints needed
+				xDiff = GET_XDIFF;																	//Get the x-offset from the previous waypoint
+				FIFO_Append(&road.waypoints, xDiff);												//Add new waypoint to the queue
 			}
 			OSMutexPost(&wayPtLock, OS_OPT_POST_NONE, &err);
 			APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 		}
+		OSTimeDly(250u, OS_OPT_TIME_DLY, &err);
+		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 	}
 }
 
@@ -354,19 +359,23 @@ void DirectionUpdateTask(void * p_args) {
 		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
 
 		if(prevDir != localDir) {
-			dirFlags = OSFlagPendGetFlagsRdy(&err);
+			OSMutexPend(&vehStLock, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);
+			APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
+			vehState.vehDir = localDir;
+			OSMutexPost(&vehStLock, OS_OPT_POST_NONE, &err);
+			APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
 
-			if(dirFlags == DIR_FLG_NONE) {												//No flags currently set, do not need to clear them
-				OSFlagPost(&dirChngFlags, (1 << localDir), OS_OPT_POST_FLAG_SET, &err);	//Direction flag set
-				APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
-			}
-			else {																		//Direction flag outdated, clear and update
-				OSFlagPost(&dirChngFlags, dirFlags, OS_OPT_POST_FLAG_CLR, &err);		//Current direction flag cleared
-				APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
-
-				OSFlagPost(&dirChngFlags, (1 << localDir), OS_OPT_POST_FLAG_SET, &err);	//Direction flag updated to new direction
-				APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
-			}
+//			if(dirFlags == DIR_FLG_NONE) {												//No flags currently set, do not need to clear them
+//				OSFlagPost(&dirChngFlags, (1 << localDir), OS_OPT_POST_FLAG_SET, &err);	//Direction flag set
+//				APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
+//			}
+//			else {																		//Direction flag outdated, clear and update
+//				OSFlagPost(&dirChngFlags, dirFlags, OS_OPT_POST_FLAG_CLR, &err);		//Current direction flag cleared
+//				APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
+//
+//				OSFlagPost(&dirChngFlags, (1 << localDir), OS_OPT_POST_FLAG_SET, &err);	//Direction flag updated to new direction
+//				APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
+//			}
 		}
 		prevDir = localDir;																//Update local direction variable
 
@@ -395,7 +404,7 @@ void PhysicsModelTask(void* p_args) {
 		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
 
 		cpAccelFwd = cpPower / cpVel;											//Calculate forward acceleration
-		cpAccelSd = pow(cpVel, 2) / vehSpecs.turnRadius;						//Calculate sideways acceleration
+		cpAccelSd = (cpVel*cpVel) / vehSpecs.turnRadius;	//Calculate sideways acceleration
 		cpVel += cpAccelFwd * PHYS_UPDATE_RATE;									//Calculate vehicle velocity
 		cpPower += cpVel * PHYS_UPDATE_RATE;									//Calculate vehicle power
 
@@ -445,7 +454,7 @@ void SpeedUpdateTask(void* p_args) {
 			OSSemPost(&spdUpdateSem, OS_OPT_POST_1, &err);						//Signal to vehicle state task that speed has been updated
 			APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 
-			while(!(GPIO_PortInGet & BTN0_PIN)) {								//While button 0 is being held down
+			while(!(GPIO_PortInGet(BTN0_PORT) & (1 << BTN0_PIN))) {								//While button 0 is being held down
 				localSpd += localSpd * .05;										//Increase speed
 				if(localSpd >= 100) {
 					localSpd = 100;
@@ -462,7 +471,7 @@ void SpeedUpdateTask(void* p_args) {
 				OSSemPost(&spdUpdateSem, OS_OPT_POST_1, &err);					//Signal to vehicle state task that speed has been updated
 				APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 
-				OSTimeDly(10u, OS_OPT_TIME_DLY, &err);							//Give player time to release button
+				OSTimeDly(100u, OS_OPT_TIME_DLY, &err);							//Give player time to release button
 				APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 			}
 		}
@@ -480,7 +489,7 @@ void SpeedUpdateTask(void* p_args) {
 			OSSemPost(&spdUpdateSem, OS_OPT_POST_1, &err);						//Signal to vehicle state task that speed has been updated
 			APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 
-			while(!(GPIO_PortInGet & BTN1_PIN)) {								//While button 0 is being held down
+			while(!(GPIO_PortInGet(BTN1_PORT) & (1 << BTN1_PIN))) {								//While button 0 is being held down
 				localSpd -= localSpd * .05;										//Increase speed
 				if(localSpd <= 20) {											//If speed gets to 20 stop car
 					localSpd = 0;
@@ -494,7 +503,7 @@ void SpeedUpdateTask(void* p_args) {
 				OSSemPost(&spdUpdateSem, OS_OPT_POST_1, &err);					//Signal to vehicle state task that speed has been updated
 				APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 
-				OSTimeDly(10u, OS_OPT_TIME_DLY, &err);							//Give player time to release button
+				OSTimeDly(100u, OS_OPT_TIME_DLY, &err);							//Give player time to release button
 				APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 			}
 		}
@@ -512,28 +521,64 @@ void LEDWarningTask(void* p_args) {
 
 	GPIO_InitLEDs();							//Enable LEDs
 	OS_FLAGS ledEventFlags;						//Event flags
+	OS_FLAGS warnFlags;							//Looking for warnings
+	bool slipWarn, headWarn = false;			//Warning state variables
 
 	while(1) {
 		//Wait for LED event
-		ledEventFlags = OSFlagPend(&LEDDriverEvent, LED_WARN_ALL, 0, OS_OPT_PEND_FLAG_SET_ANY | OS_OPT_PEND_BLOCKING, &timestamp, &err);
-		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
-		OSFlagPost(&LEDDriverEvent, ledEventFlags, OS_OPT_POST_FLAG_CLR, &err);				//Clear flags
+		if(!slipWarn && !headWarn) {
+			ledEventFlags = OSFlagPend(&ledWarnFlags, LED_WARN_ANY, 0, OS_OPT_PEND_FLAG_SET_ANY | OS_OPT_PEND_BLOCKING, &timestamp, &err);
+			APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+		}
+		else if(!slipWarn && headWarn) {
+			ledEventFlags = OSFlagPend(&ledWarnFlags, ANY_EX_HEAD, 0, OS_OPT_PEND_FLAG_SET_ANY | OS_OPT_PEND_BLOCKING, &timestamp, &err);
+			APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+		}
+		else if(slipWarn && !headWarn) {
+			ledEventFlags = OSFlagPend(&ledWarnFlags, ANY_EX_SLIP, 0, OS_OPT_PEND_FLAG_SET_ANY | OS_OPT_PEND_BLOCKING, &timestamp, &err);
+			APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+		}
+		else {
+			ledEventFlags = OSFlagPend(&ledWarnFlags, ANY_EX_WARN, 0, OS_OPT_PEND_FLAG_SET_ANY | OS_OPT_PEND_BLOCKING, &timestamp, &err);
+			APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+		}
+		//Clear current event flags
+		OSFlagPost(&ledWarnFlags, ledEventFlags, OS_OPT_POST_FLAG_CLR, &err);				//Clear flags
 		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 
-		//Check speed warning light events
-		if(ledEventFlags & LED_WARN_SPD_VIOLATION){
-			GPIO_PinOutSet(LED0_PORT, LED0_PIN);
-		}
-		else if(ledEventFlags & LED_WARN_CLR_SPD_VIOLATION) {
+		//Check if warning flags cleared
+		warnFlags = OSFlagPendGetFlagsRdy(&err);
+		if(slipWarn && !(warnFlags & TIRE_SLIP_WARN)) {
+			slipWarn = false;
 			GPIO_PinOutClear(LED0_PORT, LED0_PIN);
 		}
+		if(headWarn && !(warnFlags & VEH_HEAD_WARN)) {
+			headWarn = false;
+			GPIO_PinOutClear(LED1_PORT, LED1_PIN);
+		}
 
-		//Check turn warning light flags
-		if(ledEventFlags & LED_WARN_TRN_VIOLATION) {
+		//Check speed warning light events
+		if(!slipWarn && (ledEventFlags & TIRE_SLIP_WARN)){
+			GPIO_PinOutSet(LED0_PORT, LED0_PIN);
+		}
+		if(ledEventFlags & TIRE_OFF_ROAD) {
+			GPIO_PinOutSet(LED0_PORT, LED0_PIN);
+		}
+		if(!headWarn && (ledEventFlags & VEH_HEAD_WARN)) {
 			GPIO_PinOutSet(LED1_PORT, LED1_PIN);
 		}
-		else if(ledEventFlags & LED_WARN_CLR_TRN_VIOLATION) {
-			GPIO_PinOutClear(LED1_PORT, LED1_PIN);
+		if(ledEventFlags & VEH_OFF_ROAD) {
+			GPIO_PinOutSet(LED1_PORT, LED1_PIN);
+		}
+		if(ledEventFlags & TOGGLE_WARN_LED) {
+			if(slipWarn) {
+				GPIO_PinOutToggle(LED0_PORT, LED0_PIN);
+			}
+			if(headWarn) {
+				GPIO_PinOutToggle(LED1_PORT, LED1_PIN);
+			}
+			OSTmrStart(&ledToggleTmr, &err);
+			APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 		}
 	}
 }
@@ -542,75 +587,59 @@ void LEDWarningTask(void* p_args) {
 void LCDDisplayTask(void* p_args) {
 	RTOS_ERR err;
 	CPU_TS timestamp;
+
 	char* dirStr[] = DIRECTION_STRINGS;
-	char buffer[15];
-	int currSpeed;
-	Direction_t currDir;
-	bool spdChng, dirChng = false;
+	char buffer[10];
+	Direction_t dir;
+	uint16_t speed;
+	int numWaypoints;
+	int x;
+	int y;
+	struct WayPt_t* head;
 
 	//Initialize the display
 	DISPLAY_Init();
 
 	if (RETARGET_TextDisplayInit() != TEXTDISPLAY_EMSTATUS_OK) {
-	while (1) ;
+		while (1);
 	}
 
-	// Initialize local copy of the speed
-	OSMutexPend(&setptDataMutex, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);
-	currSpeed = setptData.speed;
-	OSMutexPost(&setptDataMutex, OS_OPT_POST_NONE, &err);
-	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
-
-	//Initialize local copy of direction
-	OSMutexPend(&vehDirMutex, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);
-	currDir = vehicleDir.dir;
-	OSMutexPost(&vehDirMutex, OS_OPT_POST_NONE, &err);
-	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
-
-	//Print initial direction
-	itoa(currSpeed, buffer, 10);
-	printf("Direction: %s\nSpeed: %s", dirStr[currDir], buffer);
-
-	//Start Task timer
-//	OSTmrStart(&LCDDispTmr, &err);
-//	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
-//
-//	//Wait for task timer to expire
-//	OSTaskSuspend(&LCDDispTaskTCB, &err);
-//	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
-
 	while(1) {
-		//Update local copy of the speed
-		OSMutexPend(&setptDataMutex, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);
-		if(currSpeed != setptData.speed) {
-			currSpeed = setptData.speed;
-			spdChng = true;
-		}
-		OSMutexPost(&setptDataMutex, OS_OPT_POST_NONE, &err);
+		//Copy Vehicle state information
+		OSMutexPend(&vehStLock, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);
+		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+		dir = vehState.vehDir;
+		speed = vehState.speed;
+		OSMutexPost(&vehStLock, OS_OPT_POST_NONE, &err);
 		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 
-		//Update local copy of the direction
-		OSMutexPend(&vehDirMutex, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);
-		if(currDir != vehicleDir.dir) {
-			currDir = vehicleDir.dir;
-			dirChng = true;
-		}
-		OSMutexPost(&vehDirMutex, OS_OPT_POST_NONE, &err);
+		//Copy Waypoint and fifo information
+		OSMutexPend(&wayPtLock, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);
+		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+		numWaypoints = road.waypoints.currWayPts;
+		head = FIFO_Peek(&road.waypoints);
+		x = head->xPos;
+		y = head->yPos;
+		FIFO_Pop(&road.waypoints);
+		OSMutexPost(&wayPtLock, OS_OPT_POST_NONE, &err);
 		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 
-		//Update display if necessary
-		if(spdChng || dirChng) {
-			printf("\f");
-			itoa(currSpeed, buffer, 10);
-			printf("Direction: %s\nSpeed: %s", dirStr[currDir], buffer);
-			spdChng = false;
-			dirChng = false;
-		}
+		printf("\f");
+		//Print direction
+		printf("Direction: %s\n", dirStr[dir]);
+		//Print speed
+		itoa(speed, buffer, 10);
+		printf("Speed: %s\n", buffer);
 
-//		//Wait for next iteration
-//		OSTaskSuspend(&LCDDispTaskTCB, &err);
-//		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
-		OSTimeDly(100u, OS_OPT_TIME_DLY, &err);
+		//Print waypoint data
+		itoa(numWaypoints, buffer, 10);
+		printf("Num of Way Pts: %s\n", buffer);
+		itoa(x, buffer, 10);
+		printf("X Pos Way Pt: %s\n", buffer);
+		itoa(y, buffer, 10);
+		printf("Y Pos Way Pt: %s\n", buffer);
+
+		OSTimeDly(3000u, OS_OPT_TIME_DLY, &err);
 		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 	}
 }
@@ -627,107 +656,4 @@ void IdleTask(void* p_args) {
 		EMU_EnterEM1();
 	}
 }
-
-//void VehicleMonitorTask(void* p_args) {
-//	RTOS_ERR err;
-//	CPU_TS timestamp;
-//	OS_FLAGS flags;
-//
-//	bool speedWarn = false;		//LED Currently signaling a spped warning
-//	bool turnWarn = false;		//LED Currently signaling a turn warning
-//	Direction_t currDir = Straight;
-//	int currSpeed = 40;
-//
-//	//Start the timer
-//	OSTmrStart(&vehTurnTimeout, &err);
-//	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
-//
-//	while(1) {
-//		//Wait for speed change, direction change, or hard left/right timeout
-//		flags = OSFlagPend(&vehMonFlags, VEH_MON_SET_FLAGS, 0, OS_OPT_PEND_FLAG_SET_ANY | OS_OPT_PEND_BLOCKING, &timestamp, &err);
-//		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
-//		OSFlagPost(&vehMonFlags, flags, OS_OPT_POST_FLAG_CLR, &err);
-//
-//		if(flags & SPD_SETPT_FLAG) {																		//Speed change occurred
-//			//Critical section
-//			OSMutexPend(&setptDataMutex, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);
-//			currSpeed = setptData.speed;
-//			OSMutexPost(&setptDataMutex, OS_OPT_POST_NONE, &err);
-//			if(currSpeed > 70 && !speedWarn) {														//Send Speed violation if speed is greater than 70 for any drection
-//				OSFlagPost(&LEDDriverEvent, LED_WARN_SPD_VIOLATION, OS_OPT_POST_FLAG_SET, &err);
-//				APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
-//				speedWarn = true;
-//			}
-//			else if(currSpeed > 50 && !speedWarn && currDir != Straight) {							//Send speed warning if speed is greater than 50 and the drive is turning
-//				OSFlagPost(&LEDDriverEvent, LED_WARN_SPD_VIOLATION, OS_OPT_POST_FLAG_SET, &err);
-//				APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
-//				speedWarn = true;
-//			}
-//			else if(setptData.speed < 75 && speedWarn && currDir == Straight) {						//Clear speed violation if driver not turning and speed less than 75
-//				OSFlagPost(&LEDDriverEvent, LED_WARN_CLR_SPD_VIOLATION, OS_OPT_POST_FLAG_SET, &err);
-//				APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
-//				speedWarn = false;
-//			}
-//			else if(setptData.speed < 55 && speedWarn) {											//Clear speed violation if speed is less than 55 for any turn direction
-//				OSFlagPost(&LEDDriverEvent, LED_WARN_CLR_SPD_VIOLATION, OS_OPT_POST_FLAG_SET, &err);
-//				APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
-//				speedWarn = false;
-//			}
-//		}
-//
-//		if(flags & VEH_DIR_FLAG) {																			//Vehicle direction changed
-//			OSMutexPend(&vehDirMutex, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);
-//			currDir = vehicleDir.dir;																		//Get Current direction
-//			OSMutexPost(&vehDirMutex, OS_OPT_POST_NONE, &err);
-//			if(turnWarn) {																					//turn off warning
-//				turnWarn = false;
-//				OSFlagPost(&LEDDriverEvent, LED_WARN_CLR_TRN_VIOLATION, OS_OPT_POST_FLAG_SET, &err);		//Signal LED task to turn off turn warning light
-//				APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
-//
-//			}
-//			else {																							//Only need to stop timer if it hasn't already expired
-//				OSTmrStop(&vehTurnTimeout, OS_OPT_TMR_NONE, DEF_NULL, &err);								//Restart the timer
-//				APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
-//			}
-//			OSTmrStart(&vehTurnTimeout, &err);
-//			APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
-//
-//
-//			if(currSpeed > 70 && !speedWarn) {															//Speed greater than or equal to 75, speed violation
-//				OSFlagPost(&LEDDriverEvent, LED_WARN_SPD_VIOLATION, OS_OPT_POST_FLAG_SET, &err);
-//				APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
-//				speedWarn = true;
-//			}
-//			else if(currSpeed < 75 && speedWarn && currDir == Straight) {								//Speed less than or equal to 70, and direction straight clear speed violation
-//				OSFlagPost(&LEDDriverEvent, LED_WARN_CLR_SPD_VIOLATION, OS_OPT_POST_FLAG_SET, &err);
-//				APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
-//				speedWarn = false;
-//			}
-//
-//			else if(currSpeed > 50 && !speedWarn && currDir != Straight) {								//Speed greater than or equal to 55 and direction is not straigt
-//				OSFlagPost(&LEDDriverEvent, LED_WARN_SPD_VIOLATION, OS_OPT_POST_FLAG_SET, &err);
-//				APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
-//				speedWarn = true;
-//			}
-//			else if(currSpeed < 55 && speedWarn) {														//Any speed less than 55, no speed violation
-//				OSFlagPost(&LEDDriverEvent, LED_WARN_CLR_SPD_VIOLATION, OS_OPT_POST_FLAG_SET, &err);
-//				APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
-//				speedWarn = false;
-//			}
-//		}
-//
-//		if(flags & VEH_TURNTM_FLAG) {																		//Hard left/right timeout expired
-//			turnWarn = true;																				//Set turn warning state variable
-//			OSFlagPost(&LEDDriverEvent, LED_WARN_TRN_VIOLATION, OS_OPT_POST_FLAG_SET, &err);				//Signal LED task to turn on turn warning light
-//			APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
-//		}
-//	}
-//}
-//
-//void VehicleTurnTimeout(void* tmr, void* p_args) {
-//	RTOS_ERR err;
-//
-//	OSFlagPost(&vehMonFlags, VEH_TURNTM_FLAG, OS_OPT_POST_FLAG_SET, &err);	//Vehicle turn hard left/right timeout, notify Vehicle Monitor task
-//	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
-//}
 
