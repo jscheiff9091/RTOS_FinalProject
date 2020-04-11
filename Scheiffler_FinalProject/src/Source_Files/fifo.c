@@ -12,24 +12,29 @@
 #include <stdlib.h>
 
 //----- FIFO Append -----
-void FIFO_Append(WayPtFIFO_t* fifo, int xDiff){
+void FIFO_Append(WayPtFIFO_t* fifo, int xDiff, bool useXDiff){
 	struct WayPt_t* newNode = (struct WayPt_t*) malloc(sizeof(struct WayPt_t)); //Allocate a new node on the heap
 
-	if(newNode != NULL) {								//Ensure memory successfully allocated
+	if(newNode != NULL) {									//Ensure memory successfully allocated
 
-		newNode->next = NULL;							//Node is at end of the list
+		newNode->next = NULL;								//Node is at end of the list
 
-		if(FIFO_IsEmpty(fifo)) {						//List empty?
+		if(FIFO_IsEmpty(fifo)) {							//List empty?
 			newNode->xPos = 0;
 			newNode->yPos = 0;
-			fifo->head = newNode;						//First entry, tail and head point to same node
+			fifo->head = newNode;							//First entry, tail and head point to same node
 			fifo->tail = newNode;
 		}
 		else {
-			newNode->xPos = fifo->tail->xPos + xDiff;		//Add x delta to previous waypoint to get this x
+			if(useXDiff) {
+				newNode->xPos = fifo->tail->xPos + xDiff;	//Add x delta to previous waypoint to get this x
+			}
+			else {
+				newNode->xPos = xDiff;						//Use x value passed in as true x value, not difference.
+			}
 			newNode->yPos = fifo->tail->yPos + WAYPT_YDIFF;	//Next way point is 5m
-			fifo->tail->next = newNode;					//Set current tail node to point to new node
-			fifo->tail = newNode;						//Set tail to new node
+			fifo->tail->next = newNode;						//Set current tail node to point to new node
+			fifo->tail = newNode;							//Set tail to new node
 		}
 
 		fifo->currWayPts++;
@@ -40,8 +45,8 @@ void FIFO_Append(WayPtFIFO_t* fifo, int xDiff){
 
 //----- FIFO Peek -----
 struct WayPt_t* FIFO_Peek(WayPtFIFO_t* fifo) {
-	if(FIFO_IsEmpty(fifo)) return NULL;				//If fifo is empty, nothing to pop
-	else return fifo->head;							//Return pointer to head of the list
+	if(FIFO_IsEmpty(fifo)) return NULL;						//If fifo is empty, nothing to pop
+	else return fifo->head;									//Return pointer to head of the list
 }
 
 

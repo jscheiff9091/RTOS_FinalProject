@@ -20,22 +20,33 @@
 #define GET_XDIFF			rand() % (XDIFF_HIGH - XDIFF_LO + 1) + XDIFF_LO
 #define WAYPT_YDIFF			5
 
-
 #define PHYS_UPDATE_RATE	.25
+#define VEHST_UPDATE_RATE   .1
+
+#define STD_MU				2
 
 // ----- Type Definitions -----
 typedef enum {
-	Truck,
-	Tourism,
-	Performance
+	Performace = 1,
+	Tourism = 2,
+	Truck = 3
 }Tire_t;
+
+typedef enum {
+	Finished,
+	SpunOut,
+	LeftRoad
+}GameResult_t;
 
 typedef struct {
 	Direction_t vehDir;
-	uint16_t xPos;
-	uint16_t yPos;
-	uint16_t speed;
-	//uint16_t angle; //????
+	int16_t xPos;
+	int16_t yPos;
+	int16_t circX;
+	int16_t circY;
+	uint16_t radius;
+	uint8_t angle;
+	double prcntSlip;
 }VehSt_T;
 
 typedef struct {
@@ -65,11 +76,38 @@ typedef struct {
 	WayPtFIFO_t waypoints;
 }Road_t;
 
+typedef struct {
+	uint16_t distance;
+	uint16_t sumOfSpeeds;
+	uint16_t numSums;
+	GameResult_t gameResult;
+}GameStats_t;
+
+typedef struct {
+	int16_t xShift;
+	int16_t yShift;
+}ScreenShift_t;
+
 // ----- Global Variables -----
 extern VehSt_T vehState;             	/**< Variable to hold the current vehicle state */
 extern VehSpecs_t vehSpecs;				/**< Variable to hold the data related to the vehicle selected */
 extern VehPhys_t vehPhys;				/**< Variable to hold the vehicle physics data */
 extern uint8_t vehSlip;					/**< Slip parameter of the vehicle */
 extern Road_t road;						/**< Variable to hold information about the road */
+extern Road_t usedRoad;					/**< Road FIFO which holds used waypoints for boundary testing */
+extern GameStats_t gameStats;			/**< Variable to track stats to be printed at the end of the game */
+
+// ----- Function Prototypes -----
+/// @brief Update the position of the vehicle
+void UpdateVehiclePosition(void);
+
+/// @brief Update the angle of the vehicle travel vector
+void UpdateVehicleAngle(void);
+
+/// @brief Update the slip percentage of the vehicle
+void UpdateSlip(void);
+
+/// @brief Create the circular footprint for a vehicle turn
+void CalculateCircle(void);
 
 #endif /* GAME_H_ */

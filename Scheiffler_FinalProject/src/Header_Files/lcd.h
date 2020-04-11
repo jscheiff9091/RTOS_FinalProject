@@ -11,6 +11,8 @@
 
 // ----- Macros -----
 #define LCD_TMR_PERIOD			1u
+#define NEW_SHIFT_MESSAGE		1 << 0
+#define GAME_OVER				1 << 1
 
 #define DIRECTION_STRINGS		{"Hard Left", \
 								 "Left", \

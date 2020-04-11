@@ -69,7 +69,6 @@ OS_FLAG_GRP	btnEventFlags;
 //Semaphores
 OS_SEM physModSem;
 OS_SEM gmMonSem;
-OS_SEM spdUpdateSem;
 //OS_SEM gmModeSem;
 
 //Timers
@@ -79,6 +78,10 @@ OS_TMR ledToggleTmr;
 OS_MUTEX vehStLock;
 OS_MUTEX physTupLk;
 OS_MUTEX wayPtLock;
+OS_MUTEX usedRdLock;
+
+//Message Queues
+OS_Q LCDShiftQ;
 
 /* Start Task */
 void StartTask(void* p_arg) {
@@ -114,10 +117,6 @@ void StartTask(void* p_arg) {
 	OSSemCreate(&gmMonSem, "Game Monitor Task Signal Semaphore", CNT_ZERO, &err);
 	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
 
-	//Create semaphore used to signal that speed state variable has been updated
-	OSSemCreate(&spdUpdateSem, "Speed Update Signal Semaphore", CNT_ZERO, &err);
-	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
-
 	/**** Create all Flag groups used ****/
 	//Create event flag group to communicate which vehicle state has been updated
 	OSFlagCreate(&dirChngFlags, "Direction Change Event Flags", DIR_FLG_CLR, &err);
@@ -143,6 +142,10 @@ void StartTask(void* p_arg) {
 
 	//Create mutex to protect waypoint FIFO
 	OSMutexCreate(&wayPtLock, "Waypoint FIFO Mutex", &err);
+	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
+
+	//Create mutex to protect waypoint FIFO
+	OSMutexCreate(&usedRdLock, "Used Road Waypoints FIFO Mutex", &err);
 	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
 
 
@@ -241,37 +244,37 @@ void StartTask(void* p_arg) {
 	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 
 
-//	//Create Vehicle State Update task
-//	OSTaskCreate(&vehStTaskTCB,
-//				 "Vehicle State Update Task",
-//				 VehicleStateTask,
-//				 DEF_NULL,
-//				 VEHST_TASK_PRIO,
-//				 &vehStTaskStack[0],
-//				 (VEHST_STACK_SIZE / 2u),
-//				 VEHST_STACK_SIZE,
-//				 0u,
-//				 0u,
-//				 DEF_NULL,
-//				 OS_OPT_TASK_STK_CLR,
-//				 &err);
-//	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+	//Create Vehicle State Update task
+	OSTaskCreate(&vehStTaskTCB,
+				 "Vehicle State Update Task",
+				 VehicleStateTask,
+				 DEF_NULL,
+				 VEHST_TASK_PRIO,
+				 &vehStTaskStack[0],
+				 (VEHST_STACK_SIZE / 2u),
+				 VEHST_STACK_SIZE,
+				 0u,
+				 0u,
+				 DEF_NULL,
+				 OS_OPT_TASK_STK_CLR,
+				 &err);
+	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 
 	//Create Game Monitor task
-//	OSTaskCreate(&gmMonTaskTCB,
-//				 "Game Monitor Task",
-//				 GameMonitorTask,
-//				 DEF_NULL,
-//				 GMMON_TASK_PRIO,
-//				 &gmMonTaskStack[0],
-//				 (GMMON_STACK_SIZE / 2u),
-//				 GMMON_STACK_SIZE,
-//				 0u,
-//				 0u,
-//				 DEF_NULL,
-//				 OS_OPT_TASK_STK_CLR,
-//				 &err);
-//	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+	OSTaskCreate(&gmMonTaskTCB,
+				 "Game Monitor Task",
+				 GameMonitorTask,
+				 DEF_NULL,
+				 GMMON_TASK_PRIO,
+				 &gmMonTaskStack[0],
+				 (GMMON_STACK_SIZE / 2u),
+				 GMMON_STACK_SIZE,
+				 0u,
+				 0u,
+				 DEF_NULL,
+				 OS_OPT_TASK_STK_CLR,
+				 &err);
+	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 
 
 	//Create LCD Display Task
@@ -365,17 +368,17 @@ void DirectionUpdateTask(void * p_args) {
 			OSMutexPost(&vehStLock, OS_OPT_POST_NONE, &err);
 			APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
 
-//			if(dirFlags == DIR_FLG_NONE) {												//No flags currently set, do not need to clear them
-//				OSFlagPost(&dirChngFlags, (1 << localDir), OS_OPT_POST_FLAG_SET, &err);	//Direction flag set
-//				APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
-//			}
-//			else {																		//Direction flag outdated, clear and update
-//				OSFlagPost(&dirChngFlags, dirFlags, OS_OPT_POST_FLAG_CLR, &err);		//Current direction flag cleared
-//				APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
-//
-//				OSFlagPost(&dirChngFlags, (1 << localDir), OS_OPT_POST_FLAG_SET, &err);	//Direction flag updated to new direction
-//				APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
-//			}
+			if(dirFlags == DIR_FLG_NONE) {												//No flags currently set, do not need to clear them
+				OSFlagPost(&dirChngFlags, (1 << localDir), OS_OPT_POST_FLAG_SET, &err);	//Direction flag set
+				APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
+			}
+			else {																		//Direction flag outdated, clear and update
+				OSFlagPost(&dirChngFlags, dirFlags, OS_OPT_POST_FLAG_CLR, &err);		//Current direction flag cleared
+				APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
+
+				OSFlagPost(&dirChngFlags, (1 << localDir), OS_OPT_POST_FLAG_SET, &err);	//Direction flag updated to new direction
+				APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
+			}
 		}
 		prevDir = localDir;																//Update local direction variable
 
@@ -389,10 +392,7 @@ void PhysicsModelTask(void* p_args) {
 	RTOS_ERR err;
 	CPU_TS timestamp;
 
-	uint16_t cpAccelSd;
-	uint16_t cpAccelFwd;
-	uint16_t cpVel;
-	uint16_t cpPower;
+	uint16_t cpAccelSd, cpAccelFwd, cpVel, cpPower, cpRad;
 
 	while(1) {
 		OSMutexPend(&physTupLk, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);		//Make copies of the current data in the tuple
@@ -403,16 +403,37 @@ void PhysicsModelTask(void* p_args) {
 		OSMutexPost(&physTupLk, OS_OPT_POST_NONE, &err);
 		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
 
-		cpAccelFwd = cpPower / cpVel;											//Calculate forward acceleration
-		cpAccelSd = (cpVel*cpVel) / vehSpecs.turnRadius;	//Calculate sideways acceleration
+		if(cpVel != 0) {
+			cpAccelFwd = cpPower / cpVel;										//Calculate forward acceleration
+		}
+		else if(cpPower > 0 && cpVel == 0) {
+			cpAccelFwd = 1;
+		}
+		else if(cpPower == 0 && cpVel != 0) {									//Slowing down with no power input
+			cpAccelFwd = -1;
+		}
+
+		OSMutexPend(&vehStLock, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);		//Get copy of current turn radius
+		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
+		cpRad = vehState.radius;
+		OSMutexPost(&vehStLock, OS_OPT_POST_NONE, &err);
+		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
+
+		if(cpRad == 0) {
+			cpAccelSd = (cpVel*cpVel) / vehSpecs.turnRadius;					//Calculate sideways acceleration
+		}
+		else {
+			cpAccelSd = 0;
+		}
 		cpVel += cpAccelFwd * PHYS_UPDATE_RATE;									//Calculate vehicle velocity
-		cpPower += cpVel * PHYS_UPDATE_RATE;									//Calculate vehicle power
+		if(cpVel < 0) {															//No reverse functionality
+			cpVel = 0;
+		}
 
 		OSMutexPend(&physTupLk, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);		//Update values in the physics in the tuple
 		vehPhys.accelFwd = cpAccelFwd;
 		vehPhys.accelSd = cpAccelSd;
 		vehPhys.velocity = cpVel;
-		vehPhys.power = cpPower;
 		OSMutexPost(&physTupLk, OS_OPT_POST_NONE, &err);
 		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
 
@@ -428,7 +449,7 @@ void SpeedUpdateTask(void* p_args) {
 	CPU_TS timestamp;
 
 	OS_FLAGS btnFlags;
-	int localSpd = 0;
+	double accel = 0;
 
 	GPIO_InitBTNs();															//Enable push buttons
 
@@ -437,70 +458,52 @@ void SpeedUpdateTask(void* p_args) {
 		btnFlags = OSFlagPend(&btnEventFlags, BTN_FLG_ANY, 0, (OS_OPT_PEND_BLOCKING | OS_OPT_PEND_FLAG_SET_ANY), &timestamp, &err);
 		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 
-		if(btnFlags & BTN0_PRESS) {												//Button 0 pressed
-			localSpd += localSpd * .05;											//Increase speed
-			if(localSpd >= 100) {
-				localSpd = 100;
-			}
-			else if(localSpd < 20) {
-				localSpd = 20;
+		if(btnFlags & BTN0_PRESS) {														//Button 0 pressed
+			if(accel < 1) { 															//Open throttle by 5%
+				accel += .05;
 			}
 
-			OSMutexPend(&vehStLock, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);
-			vehState.speed = localSpd;											//Update speed
-			OSMutexPost(&vehStLock, OS_OPT_POST_NONE, &err);
+			OSMutexPend(&physTupLk, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);
+			APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+			vehPhys.power = (uint16_t) accel * vehSpecs.maxPower;
+			OSMutexPost(&physTupLk, OS_OPT_POST_NONE, &err);
 			APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 
-			OSSemPost(&spdUpdateSem, OS_OPT_POST_1, &err);						//Signal to vehicle state task that speed has been updated
-			APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
-
-			while(!(GPIO_PortInGet(BTN0_PORT) & (1 << BTN0_PIN))) {								//While button 0 is being held down
-				localSpd += localSpd * .05;										//Increase speed
-				if(localSpd >= 100) {
-					localSpd = 100;
-				}
-				else if(localSpd < 20) {
-					localSpd = 20;
+			while(!(GPIO_PortInGet(BTN0_PORT) & (1 << BTN0_PIN))) {						//While button 0 is being held down
+				if(accel < 1) { 														//Open throttle by 5%
+					accel += .05;
 				}
 
-				OSMutexPend(&vehStLock, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);
-				vehState.speed = localSpd;										//Update speed
-				OSMutexPost(&vehStLock, OS_OPT_POST_NONE, &err);
+				OSMutexPend(&physTupLk, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);
+				APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+				vehPhys.power = (uint16_t) accel * vehSpecs.maxPower;
+				OSMutexPost(&physTupLk, OS_OPT_POST_NONE, &err);
 				APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 
-				OSSemPost(&spdUpdateSem, OS_OPT_POST_1, &err);					//Signal to vehicle state task that speed has been updated
-				APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
-
-				OSTimeDly(100u, OS_OPT_TIME_DLY, &err);							//Give player time to release button
+				OSTimeDly(100u, OS_OPT_TIME_DLY, &err);									//Give player time to release button
 				APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 			}
 		}
-		else if(btnFlags & BTN1_PRESS) {										//Button 1 pressed
-			localSpd -= localSpd * .05;											//Increase speed
-			if(localSpd < 20) {													//Speed too low, stop car entirely
-				localSpd = 0;
+		else if(btnFlags & BTN1_PRESS) {												//Button 1 pressed
+			if(accel > 0) {																//Close throttle by 5%
+				accel -= .05;
 			}
 
-			OSMutexPend(&vehStLock, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);
-			vehState.speed = localSpd;											//Update speed
-			OSMutexPost(&vehStLock, OS_OPT_POST_NONE, &err);
+			OSMutexPend(&physTupLk, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);
+			APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+			vehPhys.power = (uint16_t) accel * vehSpecs.maxPower;
+			OSMutexPost(&physTupLk, OS_OPT_POST_NONE, &err);
 			APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 
-			OSSemPost(&spdUpdateSem, OS_OPT_POST_1, &err);						//Signal to vehicle state task that speed has been updated
-			APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
-
-			while(!(GPIO_PortInGet(BTN1_PORT) & (1 << BTN1_PIN))) {								//While button 0 is being held down
-				localSpd -= localSpd * .05;										//Increase speed
-				if(localSpd <= 20) {											//If speed gets to 20 stop car
-					localSpd = 0;
+			while(!(GPIO_PortInGet(BTN1_PORT) & (1 << BTN1_PIN))) {						//While button 0 is being held down
+				if(accel > 0) {                                                         //Close throttle by 5%
+					accel -= .05;
 				}
 
-				OSMutexPend(&vehStLock, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);
-				vehState.speed = localSpd;										//Update speed
-				OSMutexPost(&vehStLock, OS_OPT_POST_NONE, &err);
+				OSMutexPend(&physTupLk, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);
 				APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
-
-				OSSemPost(&spdUpdateSem, OS_OPT_POST_1, &err);					//Signal to vehicle state task that speed has been updated
+				vehPhys.power = (uint16_t) accel * vehSpecs.maxPower;
+				OSMutexPost(&physTupLk, OS_OPT_POST_NONE, &err);
 				APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 
 				OSTimeDly(100u, OS_OPT_TIME_DLY, &err);							//Give player time to release button
@@ -583,6 +586,47 @@ void LEDWarningTask(void* p_args) {
 	}
 }
 
+/* Vehicle State Update Task */
+void VehicleStateTask(void* p_args) {
+	RTOS_ERR err;
+	CPU_TS timestamp;
+
+	bool turning = false;
+	OS_FLAGS turnFlags;
+	OS_SEM_CTR physSemStatus;
+
+	while(1) {
+		//Get flag and semaphore statuses
+		physSemStatus = OSSemPend(&physModSem, PEND_NB_TIMEOUT, OS_OPT_PEND_NON_BLOCKING, &timestamp, &err);
+		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+		turnFlags = OSFlagPend(&dirChngFlags, DIRCHG_ANY, PEND_NB_TIMEOUT, OS_OPT_PEND_FLAG_SET_ANY | OS_OPT_PEND_NON_BLOCKING, &timestamp, &err);
+		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+
+		if(turnFlags) {															//If vehicle turn status changed the turn footprint must be updated and flags cleared
+			CalculateCircle();
+			turning = true;
+			OSFlagPost(&dirChngFlags, turnFlags, OS_OPT_POST_FLAG_CLR, &err);
+			APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+		}
+		if(turnFlags & STRAIGHT) {												//If direction changed from turning to not turning, reset state variable
+			turning = false;
+		}
+		if(turning) {															//If vehicle in a turn its direction must be updated
+			UpdateVehicleAngle();
+		}
+		UpdateVehiclePosition();												//Position Updated on every pass
+		if(physSemStatus || turnFlags) {										//If physics tuple has been updated or the turn hass changed the slip parameter is out of date
+			UpdateSlip();
+		}
+
+		OSSemPost(&gmMonSem, OS_OPT_POST_1, &err);								//Signal game monitor task to run
+		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+
+		OSTimeDly(VEHST_UPDATE_RATE * 1000u, OS_OPT_TIME_DLY, &err);			//Delay until next update required
+		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+	}
+}
+
 /* LCD Display Task */
 void LCDDisplayTask(void* p_args) {
 	RTOS_ERR err;
@@ -609,7 +653,7 @@ void LCDDisplayTask(void* p_args) {
 		OSMutexPend(&vehStLock, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);
 		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 		dir = vehState.vehDir;
-		speed = vehState.speed;
+		//speed = vehState.speed;
 		OSMutexPost(&vehStLock, OS_OPT_POST_NONE, &err);
 		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 
@@ -641,6 +685,66 @@ void LCDDisplayTask(void* p_args) {
 
 		OSTimeDly(3000u, OS_OPT_TIME_DLY, &err);
 		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+	}
+}
+
+/* Game monitor task */
+void GameMonitorTask(void* p_args) {
+	CPU_TS timestamp;
+	RTOS_ERR err;
+
+	int16_t localXPos, localYPos = 0;
+	int16_t xDiff, yDiff = 0;
+	ScreenShift_t* scrnShft;
+
+	// Initialize used waypoints FIFO
+	OSMutexPend(&wayPtLock, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);
+	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+	struct WayPt_t* temp = FIFO_Peek(&road.waypoints);
+
+	OSMutexPend(&usedRdLock, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);
+	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+	FIFO_Append(&usedRoad, 0, USE_TRUE_X);
+	FIFO_Append(&usedRoad, temp->xPos, USE_TRUE_X);
+
+	OSMutexPost(&wayPtLock, OS_OPT_POST_NONE, &err);											//Release road FIFO locks
+	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+	OSMutexPost(&usedRdLock, OS_OPT_POST_NONE, &err);
+	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+
+
+	while(1) {
+		OSSemPend(&gmMonSem, PEND_TIMEOUT, OS_OPT_PEND_BLOCKING, &timestamp, &err);
+		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+
+		/* Compute and send the shift message */
+		OSMutexPend(&vehStLock, PEND_TIMEOUT, OS_OPT_PEND_BLOCKING, &timestamp, &err);			//Compute the change in Position
+		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+		xDiff = vehState.xPos - localXPos;
+		yDiff = vehState.yPos - localYPos;
+		localXPos = vehState.xPos;
+		localYPos = vehState.yPos;
+		OSMutexPost(&gmMonSem, OS_OPT_POST_NONE, &err);
+		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+
+		scrnShft = (ScreenShift_t*) malloc(sizeof(ScreenShift_t));								//Create pointer to shift message
+		scrnShft->xShift = xDiff;
+		scrnShft->yShift = yDiff;
+
+		OSQPost(&LCDShiftQ, (void*)scrnShft, sizeof(ScreenShift_t), OS_OPT_POST_FIFO, &err);	//Send shift message to LCD task
+		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+		OSFlagPost(&lcdFlags, NEW_SHIFT_MESSAGE, OS_OPT_POST_FLAG_SET, &err);					//Notify LCD Task of message in the queue
+		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+
+
+		/* Check if new vehicle position is out of bounds */
+		if(localYPos > next->yPos) {
+
+		}
+		if(TestBoundary);
+		//Off Road?
+		//Vector off road within 30m?
+		//Slip Warning
 	}
 }
 

@@ -50,13 +50,16 @@
 // Miscellaneous macros
 #define CNT_ZERO			    0
 #define NO_DLY           		0
+#define	PEND_TIMEOUT			10u
+#define PEND_NB_TIMEOUT			1u
 
 
 //----- Global Variables -----
 extern OS_TCB startTaskTCB;                      	/**< Task control block for the start task */
-extern CPU_STK startTaskStack[START_STACK_SIZE];         	/**< Task stack for the start task */
+extern CPU_STK startTaskStack[START_STACK_SIZE];    /**< Task stack for the start task */
 extern OS_FLAG_GRP ledWarnFlags;					/**< Flags to trigger the LED driver task */
 extern OS_FLAG_GRP btnEventFlags;					/**< Flags to signal to the button task that a button has been pressed */
+extern OS_MUTEX vehStLock;
 
 
 //----- Function Prototypes -----

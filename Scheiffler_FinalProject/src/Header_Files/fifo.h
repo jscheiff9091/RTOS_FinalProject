@@ -14,6 +14,8 @@
 
 // ----- Macros -----
 #define FIFO_CAPACITY 		10
+#define USE_TRUE_X			false
+#define USE_X_DIFF			true
 
 
 // ----- Data types -----
@@ -42,7 +44,7 @@ typedef struct
 /// @param[in] pointer to fifo
 /// @param[in] state of button 0
 /// @param[in] state of button 1
-void FIFO_Append(WayPtFIFO_t* fifo, int xDiff);
+void FIFO_Append(WayPtFIFO_t* fifo, int xDiff, bool useXDiff);
 
 
 /// @brief look at the first entry in the queue
