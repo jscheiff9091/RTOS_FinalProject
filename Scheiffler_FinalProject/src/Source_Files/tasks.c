@@ -335,7 +335,7 @@ void RoadGenerateTask(void* p_args) {
 			}
 			else {																					//More waypoints needed
 				xDiff = GET_XDIFF;																	//Get the x-offset from the previous waypoint
-				FIFO_Append(&road.waypoints, xDiff);												//Add new waypoint to the queue
+				FIFO_Append(&road.waypoints, xDiff, USE_X_DIFF);									//Add new waypoint to the queue
 			}
 			OSMutexPost(&wayPtLock, OS_OPT_POST_NONE, &err);
 			APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
@@ -368,6 +368,8 @@ void DirectionUpdateTask(void * p_args) {
 			OSMutexPost(&vehStLock, OS_OPT_POST_NONE, &err);
 			APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
 
+			dirFlags = OSFlagPend(&dirChngFlags, DIRCHG_ANY, 0, OS_OPT_PEND_FLAG_SET_ANY | OS_OPT_PEND_NON_BLOCKING, &timestamp, &err);
+			APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
 			if(dirFlags == DIR_FLG_NONE) {												//No flags currently set, do not need to clear them
 				OSFlagPost(&dirChngFlags, (1 << localDir), OS_OPT_POST_FLAG_SET, &err);	//Direction flag set
 				APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
@@ -635,7 +637,6 @@ void LCDDisplayTask(void* p_args) {
 	char* dirStr[] = DIRECTION_STRINGS;
 	char buffer[10];
 	Direction_t dir;
-	uint16_t speed;
 	int numWaypoints;
 	int x;
 	int y;
@@ -653,7 +654,6 @@ void LCDDisplayTask(void* p_args) {
 		OSMutexPend(&vehStLock, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);
 		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 		dir = vehState.vehDir;
-		//speed = vehState.speed;
 		OSMutexPost(&vehStLock, OS_OPT_POST_NONE, &err);
 		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 
@@ -671,9 +671,6 @@ void LCDDisplayTask(void* p_args) {
 		printf("\f");
 		//Print direction
 		printf("Direction: %s\n", dirStr[dir]);
-		//Print speed
-		itoa(speed, buffer, 10);
-		printf("Speed: %s\n", buffer);
 
 		//Print waypoint data
 		itoa(numWaypoints, buffer, 10);
@@ -696,6 +693,7 @@ void GameMonitorTask(void* p_args) {
 	int16_t localXPos, localYPos = 0;
 	int16_t xDiff, yDiff = 0;
 	ScreenShift_t* scrnShft;
+	OS_FLAGS flags;
 
 	// Initialize used waypoints FIFO
 	OSMutexPend(&wayPtLock, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);
@@ -704,8 +702,8 @@ void GameMonitorTask(void* p_args) {
 
 	OSMutexPend(&usedRdLock, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);
 	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
-	FIFO_Append(&usedRoad, 0, USE_TRUE_X);
-	FIFO_Append(&usedRoad, temp->xPos, USE_TRUE_X);
+	FIFO_Append(&usedRoad.waypoints, 0, USE_TRUE_X);
+	FIFO_Append(&usedRoad.waypoints, temp->xPos, USE_TRUE_X);
 
 	OSMutexPost(&wayPtLock, OS_OPT_POST_NONE, &err);											//Release road FIFO locks
 	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
@@ -724,7 +722,7 @@ void GameMonitorTask(void* p_args) {
 		yDiff = vehState.yPos - localYPos;
 		localXPos = vehState.xPos;
 		localYPos = vehState.yPos;
-		OSMutexPost(&gmMonSem, OS_OPT_POST_NONE, &err);
+		OSMutexPost(&vehStLock, OS_OPT_POST_NONE, &err);
 		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 
 		scrnShft = (ScreenShift_t*) malloc(sizeof(ScreenShift_t));								//Create pointer to shift message
@@ -738,13 +736,56 @@ void GameMonitorTask(void* p_args) {
 
 
 		/* Check if new vehicle position is out of bounds */
-		if(localYPos > next->yPos) {
-
+		OSMutexPend(&usedRdLock, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);
+		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+		if(localYPos > usedRoad.waypoints.head->next->yPos) {									//This is so ugly, it is checking if vehicle has passed the next waypoint yet
+			FIFO_Pop(&usedRoad.waypoints);
 		}
-		if(TestBoundary);
-		//Off Road?
-		//Vector off road within 30m?
-		//Slip Warning
+		OSMutexPost(&usedRdLock, OS_OPT_POST_NONE, &err);
+		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+		if(OutsideBoundary(localXPos, localYPos)) {												//Check if the vehicle has left the road
+			OSFlagPost(&lcdFlags, GAME_OVER, OS_OPT_POST_FLAG_SET, &err);
+			APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+			OSFlagPost(&ledWarnFlags, VEH_OFF_ROAD, OS_OPT_POST_FLAG_SET, &err);
+			APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+		}
+
+		/* Check if vehicle is on course to go off couse within 30m */
+		flags = OSFlagPend(&ledWarnFlags, LED_WARN_ANY, 0, OS_OPT_PEND_FLAG_SET_ANY | OS_OPT_PEND_NON_BLOCKING, &timestamp, &err);
+		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+		if(TrendingOut(localXPos, localYPos)) {													//If trending out set LED blink flag
+			OSFlagPost(&ledWarnFlags, VEH_HEAD_WARN, OS_OPT_POST_FLAG_SET, &err);
+			APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+		}
+		else {
+			if(flags & VEH_HEAD_WARN) {													//If not trending out and flag was set, clear the LED blink flag
+				OSFlagPost(&ledWarnFlags, VEH_HEAD_WARN, OS_OPT_POST_FLAG_CLR, &err);
+				APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+			}
+		}
+
+		/* Check slip warnings */
+		OSMutexPend(&vehStLock, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);
+		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+		if(vehState.prcntSlip > (.9 * VEH_SLIP_TOLERANCE)) {							//Slip percent greater than 90% of the tolerated slip
+			if(!(flags & TIRE_SLIP_WARN)) {
+				OSFlagPost(&ledWarnFlags, TIRE_SLIP_WARN, OS_OPT_POST_FLAG_SET, &err);
+				APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+			}
+		}
+		else {
+			if(flags & TIRE_SLIP_WARN) {												//Tire no longer slipping, clear flag
+				OSFlagPost(&ledWarnFlags, TIRE_SLIP_WARN, OS_OPT_POST_FLAG_CLR, &err);
+				APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+			}
+		}
+
+		if(vehState.prcntSlip > .9 * VEH_SLIP_TOLERANCE) {								//Tire slip exceeded tolerated limit
+			OSFlagPost(&lcdFlags, GAME_OVER, OS_OPT_POST_FLAG_SET, &err);
+			APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+			OSFlagPost(&ledWarnFlags, TIRE_OFF_ROAD, OS_OPT_POST_FLAG_SET, &err);
+			APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+		}
 	}
 }
 

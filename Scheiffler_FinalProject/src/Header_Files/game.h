@@ -24,6 +24,7 @@
 #define VEHST_UPDATE_RATE   .1
 
 #define STD_MU				2
+#define VEH_SLIP_TOLERANCE	.85
 
 // ----- Type Definitions -----
 typedef enum {
@@ -110,4 +111,19 @@ void UpdateSlip(void);
 /// @brief Create the circular footprint for a vehicle turn
 void CalculateCircle(void);
 
+/// @brief Check if the vehicle has left the road
+///
+/// @param[in] Vehicle x position
+/// @param[in] Vehicle y position
+///
+/// @return true if off road, false if still on
+bool OutsideBoundary(int16_t xPos, int16_t yPos);
+
+/// @brief Check if the vehicle will cross over be off road within the next 30m
+///
+/// @param[in] Vehicle x position
+/// @param[in] Vehicle y position
+///
+/// @return true will be off road, false will still be on
+bool TrendingOut(int16_t xPos, int16_t yPos);
 #endif /* GAME_H_ */

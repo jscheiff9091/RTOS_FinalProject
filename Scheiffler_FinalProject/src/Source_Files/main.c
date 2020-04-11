@@ -56,7 +56,7 @@ int main(void)
 
 	road.waypoints = (WayPtFIFO_t) { .head = NULL, .tail = NULL, .currWayPts = 0, .totalWayPts = 15 };
 	vehState.vehDir = Straight;
-	vehState.speed = 0;
+	//vehState.speed = 0;
 
 	/* Initialize tasks, OS, etc. */
 	RTOS_ERR err;

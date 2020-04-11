@@ -59,7 +59,9 @@ extern OS_TCB startTaskTCB;                      	/**< Task control block for th
 extern CPU_STK startTaskStack[START_STACK_SIZE];    /**< Task stack for the start task */
 extern OS_FLAG_GRP ledWarnFlags;					/**< Flags to trigger the LED driver task */
 extern OS_FLAG_GRP btnEventFlags;					/**< Flags to signal to the button task that a button has been pressed */
-extern OS_MUTEX vehStLock;
+extern OS_MUTEX vehStLock;							/**< Mutex to protect the vehicle state object */
+extern OS_MUTEX physTupLk;							/**< Mutex to protect the physics tuple */
+extern OS_MUTEX usedRdLock;							/**< Mutex used to protect the used road waypoint FIFO */
 
 
 //----- Function Prototypes -----

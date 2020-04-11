@@ -142,23 +142,83 @@ void CalculateCircle(void) {
 			vehState.radius = vehSpecs.tireType * vehSpecs.turnRadius;
 		}
 
-		if((vehState.vehDir == Left || vehState.vehDir == HardLeft) & vehState.angle > 90) {			//Quadrant 1, calculate center point of circular footprint
+		if((vehState.vehDir == Left || vehState.vehDir == HardLeft) && vehState.angle > 90) {			//Quadrant 1, calculate center point of circular footprint
 			vehState.circX = vehState.xPos - vehState.radius * cos(180 - vehState.angle);
 			vehState.circY = vehState.yPos - vehState.radius * sin(180 - vehState.angle);
 		}
-		else if((vehState.vehDir == Right || vehState.vehDir == HardRight) & vehState.angle <= 90) {    //Quadrant 2
+		else if((vehState.vehDir == Right || vehState.vehDir == HardRight) && vehState.angle <= 90) {   //Quadrant 2
 			vehState.circX = vehState.xPos + vehState.radius * cos(90 - vehState.angle);
 			vehState.circY = vehState.yPos - vehState.radius * sin(90 - vehState.angle);
 		}
-		else if((vehState.vehDir == Right || vehState.vehDir == HardRight) & vehState.angle > 90) {		//Quadrant 3
+		else if((vehState.vehDir == Right || vehState.vehDir == HardRight) && vehState.angle > 90) {	//Quadrant 3
 			vehState.circX = vehState.xPos + vehState.radius * cos(vehState.angle - 90);
 			vehState.circY = vehState.yPos + vehState.radius * sin(vehState.angle - 90);
 		}
-		else if((vehState.vehDir == Left || vehState.vehDir == HardLeft) & vehState.angle <= 90) {		//Quadrant 4
+		else if((vehState.vehDir == Left || vehState.vehDir == HardLeft) && vehState.angle <= 90) {		//Quadrant 4
 			vehState.circX = vehState.xPos - vehState.radius * cos(90 - vehState.angle);
 			vehState.circY = vehState.yPos + vehState.radius * sin(90 - vehState.angle);
 		}
 	}
 	OSMutexPost(&vehStLock, OS_OPT_POST_NONE, &err);
 	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+}
+
+/* Check if the vehicle is off the road */
+bool OutsideBoundary(int16_t xPos, int16_t yPos) {
+	RTOS_ERR err;
+	CPU_TS timestamp;
+
+	int16_t x1, y1, x2, y2, ySol;
+	OSMutexPend(&usedRdLock, PEND_TIMEOUT, OS_OPT_PEND_BLOCKING, &timestamp, &err);		//Get position of the previous and next waypoints
+	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+	x1 = usedRoad.waypoints.head->xPos;
+	y1 = usedRoad.waypoints.head->yPos;
+	x2 = usedRoad.waypoints.head->next->xPos;
+	y2 = usedRoad.waypoints.head->next->yPos;
+	OSMutexPost(&usedRdLock, OS_OPT_POST_NONE, &err);
+	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+
+	double slope = (y2 - y1) / (x2 - x1);
+	//Check if the vehicle has crossed the left boundary
+	ySol = (int16_t) slope * (xPos - (x1-5)) + y1;	//(equation of the left road boundary)
+	if(yPos > ySol) {
+		return true;
+	}
+	//Check if the vehicle has crossed the right boundary
+	ySol = (int16_t) slope * (xPos - (x1+5)) + y1;	//(equation of the right road boundary)
+	if(yPos < ySol) {
+		return true;
+	}
+	return false;
+}
+
+/* Check if vehicle trending off the road */
+bool TrendingOut(int16_t xPos, int16_t yPos) {
+	RTOS_ERR err;
+	CPU_TS timestamp;
+
+	uint8_t angle;
+	int16_t xSol, x2, y2;
+	double slope;
+
+	OSMutexPend(&usedRdLock, PEND_TIMEOUT, OS_OPT_PEND_BLOCKING, &timestamp, &err);		//Get position of the previous and next waypoints
+	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+	x2 = usedRoad.waypoints.head->next->xPos;
+	y2 = usedRoad.waypoints.head->next->yPos;
+	OSMutexPost(&usedRdLock, OS_OPT_POST_NONE, &err);
+	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+
+	OSMutexPend(&vehStLock, PEND_TIMEOUT, OS_OPT_PEND_BLOCKING, &timestamp, &err);		//Get current angle of the vehicle path vector
+	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+	angle = vehState.angle;
+	OSMutexPost(&vehStLock, OS_OPT_POST_NONE, &err);
+	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+
+	slope = sin(angle) / cos(angle);
+	xSol = (y2 - yPos) / slope + xPos;													//Calculate position of the vehicle if it were to continue to the next waypoint along this vector
+
+	if(xSol < (x2 - 5) || xSol > (x2 + 5)) {
+		return true;
+	}
+	return false;
 }
