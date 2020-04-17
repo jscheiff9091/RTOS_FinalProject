@@ -21,8 +21,8 @@
 #include <stdio.h>
 
 #include "display.h"
-#include "textdisplay.h"
-#include "retargettextdisplay.h"
+#include "glib.h"
+#include "dmd.h"
 
 #include  <cpu/include/cpu.h>
 #include  <common/include/common.h>
@@ -79,9 +79,6 @@ OS_MUTEX vehStLock;
 OS_MUTEX physTupLk;
 OS_MUTEX wayPtLock;
 OS_MUTEX usedRdLock;
-
-//Message Queues
-OS_Q LCDShiftQ;
 
 /* Start Task */
 void StartTask(void* p_arg) {
@@ -164,117 +161,117 @@ void StartTask(void* p_arg) {
 
 	/**** Create all tasks ******/
 	//Create the road generation task
-	OSTaskCreate(&rdGenTaskTCB,
-				 "Road Generation Task",
-				 RoadGenerateTask,
-				 DEF_NULL,
-				 RDGEN_TASK_PRIO,
-				 &rdGenTaskStack[0],
-				 (RDGEN_STACK_SIZE / 2u),
-				 RDGEN_STACK_SIZE,
-				 0u,
-				 0u,
-				 DEF_NULL,
-				 OS_OPT_TASK_STK_CLR,
-				 &err);
-	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
-
-	//Create slider input task
-	OSTaskCreate(&dirTaskTCB,
-				 "Direction Update Task",
-				 DirectionUpdateTask,
-				 DEF_NULL,
-				 DIR_TASK_PRIO,
-				 &dirTaskStack[0],
-				 (DIR_STACK_SIZE / 2u),
-				 DIR_STACK_SIZE,
-				 0u,
-				 0u,
-				 DEF_NULL,
-				 OS_OPT_TASK_STK_CLR,
-				 &err);
-	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
-
-	//Create the road generation task
-	OSTaskCreate(&physModTaskTCB,
-				 "Physics Model Update Task",
-				 PhysicsModelTask,
-				 DEF_NULL,
-				 RDGEN_TASK_PRIO,
-				 &physModTaskStack[0],
-				 (PHYSMOD_STACK_SIZE / 2u),
-				 PHYSMOD_STACK_SIZE,
-				 0u,
-				 0u,
-				 DEF_NULL,
-				 OS_OPT_TASK_STK_CLR,
-				 &err);
-	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
-
-	//Create button input task
-	OSTaskCreate(&spdTaskTCB,
-				 "Speed Update Task",
-				 SpeedUpdateTask,
-				 DEF_NULL,
-				 SPD_TASK_PRIO,
-				 &spdTaskStack[0],
-				 (SPD_STACK_SIZE / 2u),
-				 SPD_STACK_SIZE,
-				 0u,
-				 0u,
-				 DEF_NULL,
-				 OS_OPT_TASK_STK_CLR,
-				 &err);
-	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
-
-	//Create LED Warning task
-	OSTaskCreate(&ledTaskTCB,
-				 "LED Warning Task",
-				 LEDWarningTask,
-				 DEF_NULL,
-				 LED_TASK_PRIO,
-				 &ledTaskStack[0],
-				 (LED_STACK_SIZE / 2u),
-				 LED_STACK_SIZE,
-				 0u,
-				 0u,
-				 DEF_NULL,
-				 OS_OPT_TASK_STK_CLR,
-				 &err);
-	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
-
-
-	//Create Vehicle State Update task
-	OSTaskCreate(&vehStTaskTCB,
-				 "Vehicle State Update Task",
-				 VehicleStateTask,
-				 DEF_NULL,
-				 VEHST_TASK_PRIO,
-				 &vehStTaskStack[0],
-				 (VEHST_STACK_SIZE / 2u),
-				 VEHST_STACK_SIZE,
-				 0u,
-				 0u,
-				 DEF_NULL,
-				 OS_OPT_TASK_STK_CLR,
-				 &err);
-	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+//	OSTaskCreate(&rdGenTaskTCB,
+//				 "Road Generation Task",
+//				 RoadGenerateTask,
+//				 DEF_NULL,
+//				 RDGEN_TASK_PRIO,
+//				 &rdGenTaskStack[0],
+//				 (RDGEN_STACK_SIZE / 2u),
+//				 RDGEN_STACK_SIZE,
+//				 0u,
+//				 0u,
+//				 DEF_NULL,
+//				 OS_OPT_TASK_STK_CLR,
+//				 &err);
+//	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+//
+//	//Create slider input task
+//	OSTaskCreate(&dirTaskTCB,
+//				 "Direction Update Task",
+//				 DirectionUpdateTask,
+//				 DEF_NULL,
+//				 DIR_TASK_PRIO,
+//				 &dirTaskStack[0],
+//				 (DIR_STACK_SIZE / 2u),
+//				 DIR_STACK_SIZE,
+//				 0u,
+//				 0u,
+//				 DEF_NULL,
+//				 OS_OPT_TASK_STK_CLR,
+//				 &err);
+//	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+//
+//	//Create the road generation task
+//	OSTaskCreate(&physModTaskTCB,
+//				 "Physics Model Update Task",
+//				 PhysicsModelTask,
+//				 DEF_NULL,
+//				 RDGEN_TASK_PRIO,
+//				 &physModTaskStack[0],
+//				 (PHYSMOD_STACK_SIZE / 2u),
+//				 PHYSMOD_STACK_SIZE,
+//				 0u,
+//				 0u,
+//				 DEF_NULL,
+//				 OS_OPT_TASK_STK_CLR,
+//				 &err);
+//	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+//
+//	//Create button input task
+//	OSTaskCreate(&spdTaskTCB,
+//				 "Speed Update Task",
+//				 SpeedUpdateTask,
+//				 DEF_NULL,
+//				 SPD_TASK_PRIO,
+//				 &spdTaskStack[0],
+//				 (SPD_STACK_SIZE / 2u),
+//				 SPD_STACK_SIZE,
+//				 0u,
+//				 0u,
+//				 DEF_NULL,
+//				 OS_OPT_TASK_STK_CLR,
+//				 &err);
+//	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+//
+//	//Create LED Warning task
+//	OSTaskCreate(&ledTaskTCB,
+//				 "LED Warning Task",
+//				 LEDWarningTask,
+//				 DEF_NULL,
+//				 LED_TASK_PRIO,
+//				 &ledTaskStack[0],
+//				 (LED_STACK_SIZE / 2u),
+//				 LED_STACK_SIZE,
+//				 0u,
+//				 0u,
+//				 DEF_NULL,
+//				 OS_OPT_TASK_STK_CLR,
+//				 &err);
+//	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+//
+//
+//	//Create Vehicle State Update task
+//	OSTaskCreate(&vehStTaskTCB,
+//				 "Vehicle State Update Task",
+//				 VehicleStateTask,
+//				 DEF_NULL,
+//				 VEHST_TASK_PRIO,
+//				 &vehStTaskStack[0],
+//				 (VEHST_STACK_SIZE / 2u),
+//				 VEHST_STACK_SIZE,
+//				 0u,
+//				 0u,
+//				 DEF_NULL,
+//				 OS_OPT_TASK_STK_CLR,
+//				 &err);
+//	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 
 	//Create Game Monitor task
-	OSTaskCreate(&gmMonTaskTCB,
-				 "Game Monitor Task",
-				 GameMonitorTask,
-				 DEF_NULL,
-				 GMMON_TASK_PRIO,
-				 &gmMonTaskStack[0],
-				 (GMMON_STACK_SIZE / 2u),
-				 GMMON_STACK_SIZE,
-				 0u,
-				 0u,
-				 DEF_NULL,
-				 OS_OPT_TASK_STK_CLR,
-				 &err);
-	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+//	OSTaskCreate(&gmMonTaskTCB,
+//				 "Game Monitor Task",
+//				 GameMonitorTask,
+//				 DEF_NULL,
+//				 GMMON_TASK_PRIO,
+//				 &gmMonTaskStack[0],
+//				 (GMMON_STACK_SIZE / 2u),
+//				 GMMON_STACK_SIZE,
+//				 0u,
+//				 0u,
+//				 DEF_NULL,
+//				 OS_OPT_TASK_STK_CLR,
+//				 &err);
+//	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 
 
 	//Create LCD Display Task
@@ -634,53 +631,59 @@ void LCDDisplayTask(void* p_args) {
 	RTOS_ERR err;
 	CPU_TS timestamp;
 
-	char* dirStr[] = DIRECTION_STRINGS;
-	char buffer[10];
-	Direction_t dir;
-	int numWaypoints;
-	int x;
-	int y;
-	struct WayPt_t* head;
+	EMSTATUS status;
+	GLIB_Rectangle_t car;
+	struct WayPt_t wayPtArray[30];
+	uint8_t size = 0;
+	OS_FLAGS flags;
 
-	//Initialize the display
-	DISPLAY_Init();
-
-	if (RETARGET_TextDisplayInit() != TEXTDISPLAY_EMSTATUS_OK) {
-		while (1);
+	status = DISPLAY_Init();						//Initialize the display
+	if(status != DISPLAY_EMSTATUS_OK) {
+		return;
 	}
 
+	status = DMD_init(0);							//Initialize the display controller
+	if(status != DMD_OK) {
+		return;
+	}
+
+	GLIB_Context_t  glibContext;					//Initialize graphics library
+	status = GLIB_contextInit(&glibContext);
+	if (GLIB_OK != status) {
+		return;
+	}
+
+	//Finish display setup
+	glibContext.backgroundColor = White;			//Set Background color
+	glibContext.foregroundColor = Black;
+	GLIB_setFont(&glibContext, (GLIB_Font_t *)&GLIB_FontNarrow6x8);
+	GLIB_clear(&glibContext);
+	car.xMin = CAR_XMIN;							//Set rectangle corners
+	car.xMax = CAR_XMAX;
+	car.yMin = CAR_YMIN;
+	car.yMax = CAR_YMAX;
+
+	//Initialize road array
+	size = DrawWaypoints(&glibContext, wayPtArray, size, false);
+
 	while(1) {
-		//Copy Vehicle state information
-		OSMutexPend(&vehStLock, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);
-		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
-		dir = vehState.vehDir;
-		OSMutexPost(&vehStLock, OS_OPT_POST_NONE, &err);
+		flags = OSFlagPend(&lcdFlags, LCD_FLAG_ANY, 0, OS_OPT_PEND_BLOCKING | OS_OPT_PEND_FLAG_SET_ANY, &timestamp, &err);
 		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 
-		//Copy Waypoint and fifo information
-		OSMutexPend(&wayPtLock, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);
-		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
-		numWaypoints = road.waypoints.currWayPts;
-		head = FIFO_Peek(&road.waypoints);
-		x = head->xPos;
-		y = head->yPos;
-		FIFO_Pop(&road.waypoints);
-		OSMutexPost(&wayPtLock, OS_OPT_POST_NONE, &err);
-		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+		if(flags & NEW_SHIFT_MESSAGE) {
+			GLIB_clear(&glibContext);									//Clear Waypoints
+			GLIB_drawRect(&glibContext, &car);							//Draw Vehicle
+			DrawVehicleDirLine(&glibContext);							//Draw Vehicle direction
+			size = DrawWaypoints(&glibContext, wayPtArray, size, true);	//Draw Waypoints/update road fifos
+			PrintVehicleState(&glibContext);							//Print velocity and acceleration
+			DMD_updateDisplay();										//Update LCD with changes
+		}
+		else if(flags & GAME_OVER) {
+			GLIB_clear(&glibContext);
+			DMD_updateDisplay();
+		}
 
-		printf("\f");
-		//Print direction
-		printf("Direction: %s\n", dirStr[dir]);
-
-		//Print waypoint data
-		itoa(numWaypoints, buffer, 10);
-		printf("Num of Way Pts: %s\n", buffer);
-		itoa(x, buffer, 10);
-		printf("X Pos Way Pt: %s\n", buffer);
-		itoa(y, buffer, 10);
-		printf("Y Pos Way Pt: %s\n", buffer);
-
-		OSTimeDly(3000u, OS_OPT_TIME_DLY, &err);
+		OSFlagPost(&lcdFlags, flags, OS_OPT_POST_FLAG_CLR, &err);
 		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 	}
 }
@@ -691,8 +694,6 @@ void GameMonitorTask(void* p_args) {
 	RTOS_ERR err;
 
 	int16_t localXPos, localYPos = 0;
-	int16_t xDiff, yDiff = 0;
-	ScreenShift_t* scrnShft;
 	OS_FLAGS flags;
 
 	// Initialize used waypoints FIFO
@@ -718,20 +719,9 @@ void GameMonitorTask(void* p_args) {
 		/* Compute and send the shift message */
 		OSMutexPend(&vehStLock, PEND_TIMEOUT, OS_OPT_PEND_BLOCKING, &timestamp, &err);			//Compute the change in Position
 		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
-		xDiff = vehState.xPos - localXPos;
-		yDiff = vehState.yPos - localYPos;
 		localXPos = vehState.xPos;
 		localYPos = vehState.yPos;
 		OSMutexPost(&vehStLock, OS_OPT_POST_NONE, &err);
-		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
-
-		scrnShft = (ScreenShift_t*) malloc(sizeof(ScreenShift_t));								//Create pointer to shift message
-		scrnShft->xShift = xDiff;
-		scrnShft->yShift = yDiff;
-
-		OSQPost(&LCDShiftQ, (void*)scrnShft, sizeof(ScreenShift_t), OS_OPT_POST_FIFO, &err);	//Send shift message to LCD task
-		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
-		OSFlagPost(&lcdFlags, NEW_SHIFT_MESSAGE, OS_OPT_POST_FLAG_SET, &err);					//Notify LCD Task of message in the queue
 		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 
 
@@ -747,6 +737,10 @@ void GameMonitorTask(void* p_args) {
 			OSFlagPost(&lcdFlags, GAME_OVER, OS_OPT_POST_FLAG_SET, &err);
 			APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 			OSFlagPost(&ledWarnFlags, VEH_OFF_ROAD, OS_OPT_POST_FLAG_SET, &err);
+			APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+		}
+		else {
+			OSFlagPost(&lcdFlags, NEW_SHIFT_MESSAGE, OS_OPT_POST_FLAG_SET, &err);				//Notify LCD task to update display
 			APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 		}
 

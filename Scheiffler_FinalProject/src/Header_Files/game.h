@@ -84,11 +84,6 @@ typedef struct {
 	GameResult_t gameResult;
 }GameStats_t;
 
-typedef struct {
-	int16_t xShift;
-	int16_t yShift;
-}ScreenShift_t;
-
 // ----- Global Variables -----
 extern VehSt_T vehState;             	/**< Variable to hold the current vehicle state */
 extern VehSpecs_t vehSpecs;				/**< Variable to hold the data related to the vehicle selected */
