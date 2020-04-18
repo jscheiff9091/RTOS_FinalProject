@@ -15,16 +15,16 @@
 #define DIR_FLG_CLR			0
 #define	DIR_FLG_NONE		0
 
-#define XDIFF_HIGH			5
-#define XDIFF_LO			-5
+#define XDIFF_HIGH			15
+#define XDIFF_LO			-15
 #define GET_XDIFF			rand() % (XDIFF_HIGH - XDIFF_LO + 1) + XDIFF_LO
-#define WAYPT_YDIFF			5
+#define WAYPT_YDIFF			30
 
 #define PHYS_UPDATE_RATE	.25
 #define VEHST_UPDATE_RATE   .1
 
-#define STD_MU				2
-#define VEH_SLIP_TOLERANCE	.85
+#define STD_MU				1
+#define VEH_SLIP_TOLERANCE	1
 
 // ----- Type Definitions -----
 typedef enum {
@@ -41,12 +41,12 @@ typedef enum {
 
 typedef struct {
 	Direction_t vehDir;
-	int16_t xPos;
-	int16_t yPos;
-	int16_t circX;
-	int16_t circY;
+	double xPos;
+	double yPos;
+	double circX;
+	double circY;
 	uint16_t radius;
-	uint8_t angle;
+	double angle;
 	double prcntSlip;
 }VehSt_T;
 
@@ -62,9 +62,9 @@ typedef struct {
 }VehSpecs_t;
 
 typedef struct {
-	uint16_t accelSd;
-	uint16_t accelFwd;
-	uint16_t velocity;
+	int16_t accelSd;
+	int16_t accelFwd;
+	double velocity;
 	uint16_t power;
 	uint8_t zAccel;
 	uint16_t bankAngle;
@@ -112,7 +112,7 @@ void CalculateCircle(void);
 /// @param[in] Vehicle y position
 ///
 /// @return true if off road, false if still on
-bool OutsideBoundary(int16_t xPos, int16_t yPos);
+bool OutsideBoundary(double xPos, double yPos);
 
 /// @brief Check if the vehicle will cross over be off road within the next 30m
 ///
@@ -120,5 +120,5 @@ bool OutsideBoundary(int16_t xPos, int16_t yPos);
 /// @param[in] Vehicle y position
 ///
 /// @return true will be off road, false will still be on
-bool TrendingOut(int16_t xPos, int16_t yPos);
+bool TrendingOut(double xPos, double yPos);
 #endif /* GAME_H_ */

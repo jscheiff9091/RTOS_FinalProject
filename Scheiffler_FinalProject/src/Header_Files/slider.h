@@ -19,7 +19,7 @@
 #define POS3					3
 
 #define DIRCHG_ANY				(1 << HardLeft) | (1 << Left) | (1 << Straight) | (1 << Right) | (1 << HardRight)
-#define ANY_TURN				(1 << HardLeft) | (1 << Left) | (1 << Right) | (1 << HardRight)
+#define ANY_TURN				((1 << HardLeft) | (1 << Left) | (1 << Right) | (1 << HardRight))
 #define STRAIGHT				(1 << Straight)
 
 

@@ -38,10 +38,10 @@
 #define LED_STACK_SIZE			1000u
 #define	LED_TASK_DLY			100u
 
-#define VEHST_TASK_PRIO			14u
+#define VEHST_TASK_PRIO			15u
 #define VEHST_STACK_SIZE		1000u
 
-#define GMMON_TASK_PRIO			15u
+#define GMMON_TASK_PRIO			14u
 #define GMMON_STACK_SIZE		1000u
 
 #define LCD_TASK_PRIO			16u     //Higher than LED

@@ -25,8 +25,7 @@
 void DrawVehicleDirLine(GLIB_Context_t* lcdContext) {
 	RTOS_ERR err;
 	CPU_TS timestamp;
-	uint8_t angle;
-	int8_t xChng, yChng;
+	double angle, xChng, yChng;
 
 	OSMutexPend(&vehStLock, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);  	//Get copy of the current vehicle angle
 	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
@@ -35,13 +34,13 @@ void DrawVehicleDirLine(GLIB_Context_t* lcdContext) {
 	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 
 	if(angle > ANGLE90) {													//Set change variables
-		angle -= ANGLE90;
-		xChng = -1 * cos((double)angle);
-		yChng = sin((double)angle);
+		angle = 180 - angle;
+		xChng = -1 * cos(angle);
+		yChng = sin(angle);
 	}
 	else {
-		xChng = cos((double)angle);
-		yChng = sin((double)angle);
+		xChng = cos(angle);
+		yChng = sin(angle);
 	}
 
 	//Draw line
@@ -52,12 +51,12 @@ void DrawVehicleDirLine(GLIB_Context_t* lcdContext) {
 uint8_t DrawWaypoints(GLIB_Context_t* lcdContext, struct WayPt_t* wayPtArray, uint8_t size, bool draw) {
 	RTOS_ERR err;
 	CPU_TS timestamp;
-	int16_t xPos, yPos, deltaX, deltaY;
+	double xPos, yPos, deltaX, deltaY;
 	uint8_t cpSize = size;
 	uint8_t sub = 0;
 	struct WayPt_t* headPtr;
 
-	OSMutexPend(&vehStLock, PEND_TIMEOUT, OS_OPT_PEND_BLOCKING, &timestamp, &err);	//Get copies of current vehicle position
+	OSMutexPend(&vehStLock, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);	//Get copies of current vehicle position
 	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 	xPos = vehState.xPos;
 	yPos = vehState.yPos;
@@ -74,21 +73,21 @@ uint8_t DrawWaypoints(GLIB_Context_t* lcdContext, struct WayPt_t* wayPtArray, ui
 			if(draw) {																//If drawing
 				deltaX = wayPtArray[i].xPos - xPos;									//get difference between car and waypoint positions
 				deltaY = wayPtArray[i].yPos - yPos;
-				GLIB_drawLineH(lcdContext, LCD_CAR_X+deltaX-XDIFF_HIGH, LCD_CAR_Y-deltaY, LCD_CAR_X+deltaX+XDIFF_HIGH);	//draw waypoint
+				GLIB_drawLineH(lcdContext, (int32_t)LCD_CAR_X+deltaX-10, (int32_t)LCD_CAR_Y-deltaY, (int32_t)LCD_CAR_X+deltaX+10);	//draw waypoint
 			}
 		}
 	}
 
-	OSMutexPend(&usedRdLock, PEND_TIMEOUT, OS_OPT_PEND_BLOCKING, &timestamp, &err);	//Get Used waypoints lock
+	OSMutexPend(&usedRdLock, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);	//Get Used waypoints lock
 	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
-	OSMutexPend(&wayPtLock, PEND_TIMEOUT, OS_OPT_PEND_BLOCKING, &timestamp, &err);	//Get upcoming waypoints lock
+	OSMutexPend(&wayPtLock, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);	//Get upcoming waypoints lock
 	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 
 	headPtr = FIFO_Peek(&road.waypoints);
 	while(headPtr != NULL && (headPtr->yPos - yPos) < LCD_CAR_Y) {					//While waypoints still fit on the screen add them to the waypoint array
 		deltaX = headPtr->xPos - xPos;												//get difference between car and waypoint positions
 		deltaY = headPtr->yPos - yPos;
-		GLIB_drawLineH(lcdContext, LCD_CAR_X+deltaX-XDIFF_HIGH, LCD_CAR_Y-deltaY, LCD_CAR_X+deltaX+XDIFF_HIGH);	//draw waypoint
+		GLIB_drawLineH(lcdContext, (int32_t)LCD_CAR_X+deltaX-10, (int32_t)LCD_CAR_Y-deltaY, (int32_t)LCD_CAR_X+deltaX+10);	//draw waypoint
 
 		wayPtArray[size] = *headPtr;												//Insert waypoint into current waypoints array
 		size++;
@@ -109,7 +108,7 @@ uint8_t DrawWaypoints(GLIB_Context_t* lcdContext, struct WayPt_t* wayPtArray, ui
 void PrintVehicleState(GLIB_Context_t* lcdContext) {
 	RTOS_ERR err;
 	CPU_TS timestamp;
-	uint16_t velocity;
+	double velocity;
 	char* velStr;
 
 	OSMutexPend(&physTupLk, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);
@@ -118,6 +117,6 @@ void PrintVehicleState(GLIB_Context_t* lcdContext) {
 	OSMutexPost(&physTupLk, OS_OPT_POST_NONE, &err);
 	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 
-	sprintf(velStr, "Vel: %ud", velocity);
+	sprintf(velStr, "Vel: %f", velocity);
 	GLIB_drawString(lcdContext, velStr, strlen(velStr), STR_XPOS, STR_YPOS, false);
 }

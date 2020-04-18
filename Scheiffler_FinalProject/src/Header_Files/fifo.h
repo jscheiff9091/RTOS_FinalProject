@@ -13,7 +13,7 @@
 #include <stdint.h>
 
 // ----- Macros -----
-#define FIFO_CAPACITY 		10
+#define FIFO_CAPACITY 		20
 #define USE_TRUE_X			false
 #define USE_X_DIFF			true
 
