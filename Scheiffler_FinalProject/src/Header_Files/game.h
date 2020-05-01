@@ -10,6 +10,7 @@
 
 #include "slider.h"
 #include "fifo.h"
+#include "math.h"
 
 // ----- Macros -----
 #define DIR_FLG_CLR			0
@@ -17,14 +18,18 @@
 
 #define XDIFF_HIGH			15
 #define XDIFF_LO			-15
+#define R_WIDTH				20
 #define GET_XDIFF			rand() % (XDIFF_HIGH - XDIFF_LO + 1) + XDIFF_LO
 #define WAYPT_YDIFF			30
+#define PI					3.1415926535
+#define deg2rad(X)			((X)/180.0)*PI
+#define rad2deg(X)			((X)/PI)*180.0
 
 #define PHYS_UPDATE_RATE	.25
 #define VEHST_UPDATE_RATE   .1
 
 #define STD_MU				1
-#define VEH_SLIP_TOLERANCE	1
+#define VEH_SLIP_TOLERANCE	.9
 
 // ----- Type Definitions -----
 typedef enum {
@@ -38,6 +43,12 @@ typedef enum {
 	SpunOut,
 	LeftRoad
 }GameResult_t;
+
+typedef enum {
+	GameStart,
+	GamePlay,
+	GameEnd
+}GameState_t;
 
 typedef struct {
 	Direction_t vehDir;
@@ -78,7 +89,7 @@ typedef struct {
 }Road_t;
 
 typedef struct {
-	uint16_t distance;
+	double distance;
 	uint16_t sumOfSpeeds;
 	uint16_t numSums;
 	GameResult_t gameResult;
@@ -92,6 +103,7 @@ extern uint8_t vehSlip;					/**< Slip parameter of the vehicle */
 extern Road_t road;						/**< Variable to hold information about the road */
 extern Road_t usedRoad;					/**< Road FIFO which holds used waypoints for boundary testing */
 extern GameStats_t gameStats;			/**< Variable to track stats to be printed at the end of the game */
+extern GameState_t	gameState;			/**< Variable to keep track of the state of the game */
 
 // ----- Function Prototypes -----
 /// @brief Update the position of the vehicle

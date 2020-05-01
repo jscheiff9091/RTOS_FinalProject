@@ -13,7 +13,7 @@
 #include <kernel/include/os.h>
 #include <common/include/rtos_utils.h>
 #include <math.h>
-#include <tgmath.h>
+//#include <tgmath.h>
 
 
 // ----- Declaration of Global Variables ------
@@ -23,6 +23,7 @@ VehPhys_t vehPhys;
 Road_t road;
 Road_t usedRoad;
 GameStats_t gameStats;
+GameState_t	gameState;
 
 
 // ----- Function definitions -----
@@ -40,22 +41,22 @@ void UpdateVehiclePosition(void) {
 	OSMutexPost(&physTupLk, OS_OPT_POST_NONE, &err);
 	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 
-	gameStats.distance += (uint16_t) distance;
+	gameStats.distance += distance;
 	gameStats.numSums += 1;
 
 	OSMutexPend(&vehStLock, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);		//Lock vehicle state variable
 	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 
 	if(vehState.angle < 90) {
-		deltaX = distance * cos(vehState.angle);					//Calculate and add change in x Position
+		deltaX = distance * cos(deg2rad(vehState.angle));					//Calculate and add change in x Position
 		vehState.xPos += deltaX;
-		deltaY = distance * sin(vehState.angle);					//Calculate and add change in y position
+		deltaY = distance * sin(deg2rad(vehState.angle));					//Calculate and add change in y position
 		vehState.yPos += deltaY;
 	}
 	else if(vehState.angle > 90) {
-		deltaX = distance * cos(180 - vehState.angle);			//Calculate and subtract change in x position
+		deltaX = distance * cos(deg2rad(180-vehState.angle));			//Calculate and subtract change in x position
 		vehState.xPos -=  deltaX;
-		deltaY = distance * sin(180 - vehState.angle);			//Calculate and add change in y position
+		deltaY = distance * sin(deg2rad(180-vehState.angle));			//Calculate and add change in y position
 		vehState.yPos += deltaY;
 	}
 	else {
@@ -75,14 +76,14 @@ void UpdateVehicleAngle(void) {
 	OSMutexPend(&vehStLock, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);		//Acquire vehicle state lock
 	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 
-	deltaX =  vehState.xPos - (double)vehState.circX;						//Get distance from center point of turn footprint to vehicle position
-	deltaY =  vehState.yPos - (double)vehState.circY;
+	deltaX =  vehState.xPos - vehState.circX;						//Get distance from center point of turn footprint to vehicle position
+	deltaY =  vehState.yPos - vehState.circY;
 
 	if((deltaX > 0 && deltaY > 0) || (deltaX < 0 && deltaY < 0)) {		    //1st and 3rd quadrants
-		vehState.angle = 90 + atan(deltaY/deltaX);
+		vehState.angle = rad2deg((PI/2) + atan(deltaY/deltaX));
 	}
 	else if((deltaX > 0 && deltaY < 0) || (deltaX < 0 && deltaY > 0)) {     //2nd and 4th quadrants
-		vehState.angle = 90 - atan(-1*(deltaY/deltaX));
+		vehState.angle = rad2deg((PI/2) - atan(-1.0*(deltaY/deltaX)));
 	}
 
 	if(vehState.angle > 180) {                                              //Vehicle cannot go backwards in my game. Just like my philosophy of life: Never look back.
@@ -144,20 +145,20 @@ void CalculateCircle(void) {
 		}
 
 		if((vehState.vehDir == Left || vehState.vehDir == HardLeft) && vehState.angle > 90) {			//Quadrant 1, calculate center point of circular footprint
-			vehState.circX = vehState.xPos - vehState.radius * cos(vehState.angle - ANGLE90);
-			vehState.circY = vehState.yPos - vehState.radius * sin(vehState.angle - ANGLE90);
+			vehState.circX = vehState.xPos - vehState.radius * cos(deg2rad(vehState.angle - ANGLE90));
+			vehState.circY = vehState.yPos - vehState.radius * sin(deg2rad(vehState.angle - ANGLE90));
 		}
 		else if((vehState.vehDir == Right || vehState.vehDir == HardRight) && vehState.angle <= 90) {   //Quadrant 2
-			vehState.circX = vehState.xPos + vehState.radius * cos(ANGLE90 - vehState.angle);
-			vehState.circY = vehState.yPos - vehState.radius * sin(ANGLE90 - vehState.angle);
+			vehState.circX = vehState.xPos + vehState.radius * cos(deg2rad(ANGLE90 - vehState.angle));
+			vehState.circY = vehState.yPos - vehState.radius * sin(deg2rad(ANGLE90 - vehState.angle));
 		}
 		else if((vehState.vehDir == Right || vehState.vehDir == HardRight) && vehState.angle > 90) {	//Quadrant 3
-			vehState.circX = vehState.xPos + vehState.radius * cos(vehState.angle - ANGLE90);
-			vehState.circY = vehState.yPos + vehState.radius * sin(vehState.angle - ANGLE90);
+			vehState.circX = vehState.xPos + vehState.radius * cos(deg2rad(vehState.angle - ANGLE90));
+			vehState.circY = vehState.yPos + vehState.radius * sin(deg2rad(vehState.angle - ANGLE90));
 		}
 		else if((vehState.vehDir == Left || vehState.vehDir == HardLeft) && vehState.angle <= 90) {		//Quadrant 4
-			vehState.circX = vehState.xPos - vehState.radius * cos(ANGLE90 - vehState.angle);
-			vehState.circY = vehState.yPos + vehState.radius * sin(ANGLE90 - vehState.angle);
+			vehState.circX = vehState.xPos - vehState.radius * cos(deg2rad(ANGLE90 - vehState.angle));
+			vehState.circY = vehState.yPos + vehState.radius * sin(deg2rad(ANGLE90 - vehState.angle));
 		}
 	}
 	OSMutexPost(&vehStLock, OS_OPT_POST_NONE, &err);
@@ -170,26 +171,41 @@ bool OutsideBoundary(double xPos, double yPos) {
 	CPU_TS timestamp;
 
 	double x1, y1, x2, y2, ySol;
+	struct WayPt_t* temp;
+
 	OSMutexPend(&usedRdLock, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);		//Get position of the previous and next waypoints
 	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 	x1 = usedRoad.waypoints.head->xPos;
 	y1 = usedRoad.waypoints.head->yPos;
 	x2 = usedRoad.waypoints.head->next->xPos;
 	y2 = usedRoad.waypoints.head->next->yPos;
+	temp = usedRoad.waypoints.head->next;
 	OSMutexPost(&usedRdLock, OS_OPT_POST_NONE, &err);
 	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 
+	if(temp == NULL) {
+		return false;
+	}
+
 	double slope = (y2 - y1) / (x2 - x1);
 	//Check if the vehicle has crossed the left boundary
-	ySol = slope * (xPos - (x1-5)) + y1;	//(equation of the left road boundary)
-	if(yPos > ySol) {
+	ySol = slope * (xPos - (x1-(R_WIDTH/2))) + y1;	//(equation of the left road boundary)
+	if(slope > 0 && yPos > ySol) {
 		return true;
 	}
+	else if(slope < 0 && yPos < ySol) {
+		return true;
+	}
+
 	//Check if the vehicle has crossed the right boundary
-	ySol = slope * (xPos - (x1+5)) + y1;	//(equation of the right road boundary)
-	if(yPos < ySol) {
+	ySol = slope * (xPos - (x1+(R_WIDTH/2))) + y1;	//(equation of the right road boundary)
+	if(slope > 0 && yPos < ySol) {
 		return true;
 	}
+	else if(slope < 0 && yPos > ySol) {
+		return true;
+	}
+
 	return false;
 }
 
@@ -215,10 +231,10 @@ bool TrendingOut(double xPos, double yPos) {
 
 	if(angle > ANGLE90) {
 		angle = 180 - angle;
-		slope = -1*sin(angle) / cos(angle);
+		slope = -1*tan(deg2rad(angle));
 	}
 	else {
-		slope = sin(angle) / cos(angle);
+		slope = tan(deg2rad(angle));
 	}
 	xSol = (y2 - yPos) / slope + xPos;													//Calculate position of the vehicle if it were to continue to the next waypoint along this vector
 

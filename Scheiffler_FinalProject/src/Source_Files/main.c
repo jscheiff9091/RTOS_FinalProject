@@ -54,8 +54,8 @@ int main(void)
 
 	CMU_RouteGPIOClock();       			//Enable GPIO Clock
 
-	road.waypoints = (WayPtFIFO_t) { .head = NULL, .tail = NULL, .currWayPts = 0, .totalWayPts = 100 };
-	usedRoad.waypoints = (WayPtFIFO_t) { .head = NULL, .tail = NULL, .currWayPts = 0, .totalWayPts = 100 };
+	road.waypoints = (WayPtFIFO_t) { .head = NULL, .tail = NULL, .currWayPts = 0, .totalWayPts = 10 };
+	usedRoad.waypoints = (WayPtFIFO_t) { .head = NULL, .tail = NULL, .currWayPts = 0, .totalWayPts = 10 };
 	vehState = (VehSt_T){ .vehDir = Straight,
 						  .xPos = 0,
 						  .yPos = 0,
@@ -82,6 +82,7 @@ int main(void)
 	                            .sumOfSpeeds = 0,
 	                            .numSums = 0,
 	                            .gameResult = Finished };
+	gameState = GameStart;
 
 	/* Initialize tasks, OS, etc. */
 	RTOS_ERR err;

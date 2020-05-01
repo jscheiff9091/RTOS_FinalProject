@@ -34,13 +34,13 @@ void DrawVehicleDirLine(GLIB_Context_t* lcdContext) {
 	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 
 	if(angle > ANGLE90) {													//Set change variables
-		angle = 180 - angle;
-		xChng = -1 * cos(angle);
-		yChng = sin(angle);
+		angle = 180.0 - angle;
+		xChng = -1.0 * cos(deg2rad(angle));
+		yChng = sin(deg2rad(angle));
 	}
 	else {
-		xChng = cos(angle);
-		yChng = sin(angle);
+		xChng = 1.0*cos(deg2rad(angle));
+		yChng = 1.0*sin(deg2rad(angle));
 	}
 
 	//Draw line
@@ -64,7 +64,7 @@ uint8_t DrawWaypoints(GLIB_Context_t* lcdContext, struct WayPt_t* wayPtArray, ui
 	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 
 	for(int i = 0; i < cpSize; i++) {												//Update current values in the array
-		if(wayPtArray[i].yPos <= yPos) {											//Check if car has passed that waypoint
+		if(wayPtArray[i].yPos < yPos) {											//Check if car has passed that waypoint
 			sub += 1;
 			size--;
 		}
@@ -73,7 +73,7 @@ uint8_t DrawWaypoints(GLIB_Context_t* lcdContext, struct WayPt_t* wayPtArray, ui
 			if(draw) {																//If drawing
 				deltaX = wayPtArray[i].xPos - xPos;									//get difference between car and waypoint positions
 				deltaY = wayPtArray[i].yPos - yPos;
-				GLIB_drawLineH(lcdContext, (int32_t)LCD_CAR_X+deltaX-10, (int32_t)LCD_CAR_Y-deltaY, (int32_t)LCD_CAR_X+deltaX+10);	//draw waypoint
+				GLIB_drawLineH(lcdContext, (int32_t)LCD_CAR_X+deltaX-(R_WIDTH/2), (int32_t)LCD_CAR_Y-deltaY, (int32_t)LCD_CAR_X+deltaX+(R_WIDTH/2));	//draw waypoint
 			}
 		}
 	}
@@ -87,7 +87,7 @@ uint8_t DrawWaypoints(GLIB_Context_t* lcdContext, struct WayPt_t* wayPtArray, ui
 	while(headPtr != NULL && (headPtr->yPos - yPos) < LCD_CAR_Y) {					//While waypoints still fit on the screen add them to the waypoint array
 		deltaX = headPtr->xPos - xPos;												//get difference between car and waypoint positions
 		deltaY = headPtr->yPos - yPos;
-		GLIB_drawLineH(lcdContext, (int32_t)LCD_CAR_X+deltaX-10, (int32_t)LCD_CAR_Y-deltaY, (int32_t)LCD_CAR_X+deltaX+10);	//draw waypoint
+		GLIB_drawLineH(lcdContext, (int32_t)LCD_CAR_X+deltaX-(R_WIDTH/2), (int32_t)LCD_CAR_Y-deltaY, (int32_t)LCD_CAR_X+deltaX+(R_WIDTH/2));  //draw waypoint
 
 		wayPtArray[size] = *headPtr;												//Insert waypoint into current waypoints array
 		size++;
@@ -96,9 +96,9 @@ uint8_t DrawWaypoints(GLIB_Context_t* lcdContext, struct WayPt_t* wayPtArray, ui
 		headPtr = FIFO_Peek(&road.waypoints);										//Check next waypoint
 	}
 
-	OSMutexPost(&wayPtLock, OS_OPT_POST_NONE, &err);								//Release locks
+	OSMutexPost(&usedRdLock, OS_OPT_POST_NONE, &err);								//Release locks
 	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
-	OSMutexPost(&usedRdLock, OS_OPT_POST_NONE, &err);
+	OSMutexPost(&wayPtLock, OS_OPT_POST_NONE, &err);
 	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 
 	return size;
@@ -109,7 +109,7 @@ void PrintVehicleState(GLIB_Context_t* lcdContext) {
 	RTOS_ERR err;
 	CPU_TS timestamp;
 	double velocity;
-	char* velStr;
+	char velStr[20];
 
 	OSMutexPend(&physTupLk, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);
 	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
@@ -117,6 +117,52 @@ void PrintVehicleState(GLIB_Context_t* lcdContext) {
 	OSMutexPost(&physTupLk, OS_OPT_POST_NONE, &err);
 	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 
-	sprintf(velStr, "Vel: %f", velocity);
+	sprintf(velStr, "Vel: %d", ((uint16_t)velocity));
 	GLIB_drawString(lcdContext, velStr, strlen(velStr), STR_XPOS, STR_YPOS, false);
+}
+
+// Print game over status message
+void PrintGameOverStatus(GLIB_Context_t* lcdContext) {
+	char msg[100];
+	char* gameEndStatusMsg[] = GAME_OVER_STATUS_MESSAGES;
+
+	sprintf(msg, "GAME OVER!");
+	GLIB_drawString(lcdContext, msg, strlen(msg), GO_STR_XPOS, GO_STR_YPOS, false);
+
+	sprintf(msg, gameEndStatusMsg[gameStats.gameResult]);
+	GLIB_drawString(lcdContext, msg, strlen(msg), GR_STR_XPOS, GR_STR_YPOS, false);
+
+	sprintf(msg, "Total Distance: %d", (int)gameStats.distance);
+	GLIB_drawString(lcdContext, msg, strlen(msg), DIS_STR_XPOS, DIS_STR_YPOS, false);
+
+	sprintf(msg, "Avg. Speed: %d", gameStats.sumOfSpeeds/gameStats.numSums);
+	GLIB_drawString(lcdContext, msg, strlen(msg), SPD_STR_XPOS, SPD_STR_YPOS, false);
+}
+
+//Print game details at the beginning of the game
+void PrintGameInit(GLIB_Context_t* lcdContext) {
+	char msg[100];
+	char* vehicleTypeMsg[] = CAR_TYPE_STRINGS;
+
+	sprintf(msg, "Press B1 to Start");
+	GLIB_drawString(lcdContext, msg, strlen(msg), START_STR_XPOS, START_STR_YPOS, false);
+
+	sprintf(msg, "Car: %s", vehicleTypeMsg[vehSpecs.tireType]);
+	GLIB_drawString(lcdContext, msg, strlen(msg), STATS_XPOS, CAR_TYPE_Y_POS, false);
+
+	sprintf(msg, "Car Power: %d", vehSpecs.maxPower);
+	GLIB_drawString(lcdContext, msg, strlen(msg), STATS_XPOS, CAR_POWER_Y_POS, false);
+
+	sprintf(msg, "Turn Radius: %d", vehSpecs.turnRadius);
+	GLIB_drawString(lcdContext, msg, strlen(msg), STATS_XPOS, CAR_RADIUS_Y_POS, false);
+
+	sprintf(msg, "Car Mass: %d", vehSpecs.mass);
+	GLIB_drawString(lcdContext, msg, strlen(msg), STATS_XPOS, CAR_MASS_Y_POS, false);
+
+	sprintf(msg, "Num. WayPts: %d", 50);
+	GLIB_drawString(lcdContext, msg, strlen(msg), STATS_XPOS, NUM_WAYPTS_Y_POS, false);
+
+	sprintf(msg, "Game Difficulty: %s", "Easy");
+	GLIB_drawString(lcdContext, msg, strlen(msg), STATS_XPOS, GM_DIFF_Y_POS, false);
+	DMD_updateDisplay();
 }
