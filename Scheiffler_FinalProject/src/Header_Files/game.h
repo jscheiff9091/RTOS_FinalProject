@@ -11,30 +11,52 @@
 #include "slider.h"
 #include "fifo.h"
 #include "math.h"
+#include "glib.h"
 
 // ----- Macros -----
 #define DIR_FLG_CLR			0
 #define	DIR_FLG_NONE		0
-
-#define XDIFF_HIGH			15
-#define XDIFF_LO			-15
+#define XDIFF_HIGH			10
+#define XDIFF_LO			-10
 #define R_WIDTH				20
-#define GET_XDIFF			rand() % (XDIFF_HIGH - XDIFF_LO + 1) + XDIFF_LO
+#define GET_XDIFF(x)		rand() % ((x*XDIFF_HIGH) - (x*XDIFF_LO) + 1) + (x*XDIFF_LO)
 #define WAYPT_YDIFF			30
 #define PI					3.1415926535
 #define deg2rad(X)			((X)/180.0)*PI
 #define rad2deg(X)			((X)/PI)*180.0
-
+#define NUM_GAME_MODES		2
+#define NUM_DIFFICULTIES	3
+#define NUM_VEHICLES		3
+#define NUM_RESTART_OPTS	2
 #define PHYS_UPDATE_RATE	.25
 #define VEHST_UPDATE_RATE   .1
-
 #define STD_MU				1
 #define VEH_SLIP_TOLERANCE	.9
-
+#define SPORTS_CAR_SPECS	{ .vehicleName = "Sports Car", 	\
+	                          .mass = 20,					\
+	                          .maxPower = 50,				\
+	                          .turnRadius = 10,				\
+	                          .vehicleWidth = 1,			\
+	                          .dragArea = 1,				\
+	                          .tireType = SportsCar }
+#define MINI_VAN_SPECS		{ .vehicleName = "Mini Van", 	\
+	                          .mass = 30,					\
+	                          .maxPower = 25,				\
+	                          .turnRadius = 25,				\
+	                          .vehicleWidth = 1,			\
+	                          .dragArea = 1,				\
+	                          .tireType = MiniVan }
+#define SEMI_SPECS			{ .vehicleName = "Semi", 		\
+	                          .mass = 60,					\
+	                          .maxPower = 15,				\
+	                          .turnRadius = 25,				\
+	                          .vehicleWidth = 1,			\
+	                          .dragArea = 1,				\
+	                          .tireType = Truck }
 // ----- Type Definitions -----
 typedef enum {
-	Performace = 1,
-	Tourism = 2,
+	SportsCar = 1,
+	MiniVan = 2,
 	Truck = 3
 }Tire_t;
 
@@ -43,6 +65,17 @@ typedef enum {
 	SpunOut,
 	LeftRoad
 }GameResult_t;
+
+typedef enum {
+	Easy,
+	Medium,
+	Hard
+}GameDifficulty_t;
+
+typedef enum {
+	TimeTrial,
+	Survival
+}GameMode_t;
 
 typedef enum {
 	GameStart,
@@ -85,6 +118,7 @@ typedef struct {
 typedef struct {
 	char RoadName[20];
 	uint8_t roadWidth;
+	uint16_t numWayPts;
 	WayPtFIFO_t waypoints;
 }Road_t;
 
@@ -93,7 +127,15 @@ typedef struct {
 	uint16_t sumOfSpeeds;
 	uint16_t numSums;
 	GameResult_t gameResult;
+	OS_TICK startTime;
+	uint16_t wayPtsPassed;
 }GameStats_t;
+
+typedef struct {
+	Tire_t vehicle;
+	GameDifficulty_t difficulty;
+	GameMode_t gameMode;
+}GameSelections_t;
 
 // ----- Global Variables -----
 extern VehSt_T vehState;             	/**< Variable to hold the current vehicle state */
@@ -104,6 +146,7 @@ extern Road_t road;						/**< Variable to hold information about the road */
 extern Road_t usedRoad;					/**< Road FIFO which holds used waypoints for boundary testing */
 extern GameStats_t gameStats;			/**< Variable to track stats to be printed at the end of the game */
 extern GameState_t	gameState;			/**< Variable to keep track of the state of the game */
+extern GameSelections_t selections;		/**< Variable to hold user selections for the game setup */
 
 // ----- Function Prototypes -----
 /// @brief Update the position of the vehicle
@@ -133,4 +176,34 @@ bool OutsideBoundary(double xPos, double yPos);
 ///
 /// @return true will be off road, false will still be on
 bool TrendingOut(double xPos, double yPos);
+
+/// @brief user selected their desired game mode
+///
+/// @param[in] LCD context
+void SelectGameMode(GLIB_Context_t* lcdContext);
+
+/// @brief User selects the difficulty of their game
+///
+/// @param[in] LCD context
+void SelectDifficulty(GLIB_Context_t* lcdContext);
+
+/// @brief User select the vehicle they would like to use
+///
+/// @param[in] LCD context
+void SelectVehicle(GLIB_Context_t* lcdContext);
+
+/// @brief Select game restart option
+///
+/// @param[in] LCD Context
+GameState_t GameResetSelect(GLIB_Context_t* lcdContext);
+
+/// @brief Initalize road and and used road FIFOs
+void InitRoadFIFOs(void);
+
+/// @brief Restore state variables to power on state
+void ResetStateVars(void);
+
+/// @bried Reset state variable to state at beginning of previous game
+void ReloadStateVars(void);
+
 #endif /* GAME_H_ */

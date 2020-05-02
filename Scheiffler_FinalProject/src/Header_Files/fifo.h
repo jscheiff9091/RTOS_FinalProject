@@ -25,7 +25,6 @@ struct WayPt_t
 	int xPos;
 	int yPos;
 	struct WayPt_t* next;
-	//struct WayPt_t* prev;  //?
 };
 
 /// @brief data type to store Setpoint fifo
@@ -34,7 +33,7 @@ typedef struct
 	struct WayPt_t* head;
 	struct WayPt_t* tail;
 	int currWayPts;
-	uint8_t totalWayPts;
+	uint16_t totalWayPts;
 }WayPtFIFO_t;
 
 
@@ -64,6 +63,11 @@ void FIFO_Pop(WayPtFIFO_t* fifo);
 ///
 /// @param[in] pointer to the fifo
 bool FIFO_IsEmpty(WayPtFIFO_t* fifo);
+
+/// @brief clear all nodes in the fifo
+///
+/// @param[in] pointer to fifo
+void FIFO_Clear(WayPtFIFO_t* fifo);
 
 
 #endif /* FIFO_H_ */

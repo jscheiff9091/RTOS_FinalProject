@@ -64,6 +64,7 @@ extern OS_MUTEX vehStLock;							/**< Mutex to protect the vehicle state object 
 extern OS_MUTEX physTupLk;							/**< Mutex to protect the physics tuple */
 extern OS_MUTEX usedRdLock;							/**< Mutex used to protect the used road waypoint FIFO */
 extern OS_MUTEX wayPtLock;							/**< Mutex to protect upcoming waypoints FIFO */
+extern OS_MUTEX gameStLock;							/**< Mutex to protect the game state state variable*/
 
 
 //----- Function Prototypes -----

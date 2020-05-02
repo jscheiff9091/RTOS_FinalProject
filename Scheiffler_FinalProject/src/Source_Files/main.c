@@ -54,36 +54,6 @@ int main(void)
 
 	CMU_RouteGPIOClock();       			//Enable GPIO Clock
 
-	road.waypoints = (WayPtFIFO_t) { .head = NULL, .tail = NULL, .currWayPts = 0, .totalWayPts = 10 };
-	usedRoad.waypoints = (WayPtFIFO_t) { .head = NULL, .tail = NULL, .currWayPts = 0, .totalWayPts = 10 };
-	vehState = (VehSt_T){ .vehDir = Straight,
-						  .xPos = 0,
-						  .yPos = 0,
-	                      .circX = 0,
-	                      .circY = 0,
-	                      .radius = 0,
-						  .angle = 90,
-	                      .prcntSlip = 0 };
-	vehSpecs = (VehSpecs_t) { .vehicleName = "Car",
-	                          .mass = 20,
-	                          .maxPower = 20,
-	                          .turnRadius = 10,
-	                          .vehicleWidth = 1,
-	                          .dragArea = 1,
-	                          .tireType = Truck};
-	vehPhys = (VehPhys_t) { .accelSd = 0,
-	                        .accelFwd = 0,
-	                        .velocity = 0,
-	                        .power = 0,
-	                        .zAccel = 0,
-	                        .bankAngle = 0,
-	                        .roll = 0 };
-	gameStats = (GameStats_t) { .distance = 0,
-	                            .sumOfSpeeds = 0,
-	                            .numSums = 0,
-	                            .gameResult = Finished };
-	gameState = GameStart;
-
 	/* Initialize tasks, OS, etc. */
 	RTOS_ERR err;
 	CPU_Init();								//Example Code called these functions...why not???

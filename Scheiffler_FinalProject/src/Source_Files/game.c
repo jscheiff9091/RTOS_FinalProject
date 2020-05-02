@@ -9,6 +9,7 @@
 #include "game.h"
 #include "tasks.h"
 #include "lcd.h"
+#include "glib.h"
 
 #include <kernel/include/os.h>
 #include <common/include/rtos_utils.h>
@@ -24,6 +25,7 @@ Road_t road;
 Road_t usedRoad;
 GameStats_t gameStats;
 GameState_t	gameState;
+GameSelections_t selections;
 
 
 // ----- Function definitions -----
@@ -111,7 +113,7 @@ void UpdateSlip(void) {
 	else {																	//Vehicle turning, compute percent slip
 		OSMutexPend(&physTupLk, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);
 		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
-		force = STD_MU * vehSpecs.tireType * vehSpecs.mass * 9.8;
+		force = STD_MU * vehSpecs.tireType * vehSpecs.mass * 9.8 * .05;
 		slip = sqrt(pow((double)(vehPhys.power/vehPhys.velocity), 2) + pow((double)(vehPhys.velocity/vehState.radius) , 2));
 		OSMutexPost(&physTupLk, OS_OPT_POST_NONE, &err);
 		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
@@ -189,7 +191,7 @@ bool OutsideBoundary(double xPos, double yPos) {
 
 	double slope = (y2 - y1) / (x2 - x1);
 	//Check if the vehicle has crossed the left boundary
-	ySol = slope * (xPos - (x1-(R_WIDTH/2))) + y1;	//(equation of the left road boundary)
+	ySol = slope * (xPos - (x1-(road.roadWidth/2))) + y1;	//(equation of the left road boundary)
 	if(slope > 0 && yPos > ySol) {
 		return true;
 	}
@@ -198,7 +200,7 @@ bool OutsideBoundary(double xPos, double yPos) {
 	}
 
 	//Check if the vehicle has crossed the right boundary
-	ySol = slope * (xPos - (x1+(R_WIDTH/2))) + y1;	//(equation of the right road boundary)
+	ySol = slope * (xPos - (x1+(road.roadWidth/2))) + y1;	//(equation of the right road boundary)
 	if(slope > 0 && yPos < ySol) {
 		return true;
 	}
@@ -238,8 +240,278 @@ bool TrendingOut(double xPos, double yPos) {
 	}
 	xSol = (y2 - yPos) / slope + xPos;													//Calculate position of the vehicle if it were to continue to the next waypoint along this vector
 
-	if(xSol < (x2 - 10) || xSol > (x2 + 10)) {
+	if(xSol < (x2 - (road.roadWidth/2)) || xSol > (x2 + (road.roadWidth/2))) {
 		return true;
 	}
 	return false;
+}
+
+/* Let user select their desired game mode */
+void SelectGameMode(GLIB_Context_t* lcdContext) {
+	RTOS_ERR err;
+	OS_FLAGS flags;
+	CPU_TS timestamp;
+
+	PrintGameModeSelection(lcdContext);
+	while(1) {
+		flags = OSFlagPend(&btnEventFlags, BTN_FLG_ANY, 0u, OS_OPT_PEND_FLAG_SET_ANY | OS_OPT_PEND_BLOCKING, &timestamp, &err);
+		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+		OSFlagPost(&btnEventFlags, flags, OS_OPT_POST_FLAG_CLR, &err);
+
+		if(flags & BTN0_PRESS) {
+			selections.gameMode = (selections.gameMode + 1) % NUM_GAME_MODES;
+			PrintGameModeSelection(lcdContext);
+		}
+		else if(flags & BTN1_PRESS) {
+			break;
+		}
+	}
+}
+
+/* Let user select the difficulty of their game */
+void SelectDifficulty(GLIB_Context_t* lcdContext) {
+	RTOS_ERR err;
+	OS_FLAGS flags;
+	CPU_TS timestamp;
+
+	PrintGameDifficultySelect(lcdContext);
+	while(1) {
+		flags = OSFlagPend(&btnEventFlags, BTN_FLG_ANY, 0u, OS_OPT_PEND_FLAG_SET_ANY | OS_OPT_PEND_BLOCKING, &timestamp, &err);
+		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+		OSFlagPost(&btnEventFlags, flags, OS_OPT_POST_FLAG_CLR, &err);
+
+		if(flags & BTN0_PRESS) {
+			selections.difficulty = (selections.difficulty + 1) % NUM_DIFFICULTIES;
+			PrintGameDifficultySelect(lcdContext);
+		}
+		else if(flags & BTN1_PRESS) {
+			break;
+		}
+	}
+
+	//Waypoint offsets
+	OSMutexPend(&usedRdLock, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);	//Get Used waypoints lock
+	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+	OSMutexPend(&wayPtLock, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);			//Get upcoming waypoints lock
+	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+
+	road.roadWidth  = (NUM_DIFFICULTIES - selections.difficulty - 1) * 5 + 15;
+	if(selections.gameMode == TimeTrial) {
+		usedRoad.waypoints.totalWayPts = (selections.difficulty + 1) * 25;
+		road.waypoints.totalWayPts = (selections.difficulty + 1) * 25;
+		road.numWayPts = road.waypoints.totalWayPts + 5;
+	}
+	else {
+		usedRoad.waypoints.totalWayPts = 0xFFFF;
+		road.waypoints.totalWayPts = 0xFFFF;
+		road.numWayPts = 0xFFFF;
+	}
+	OSMutexPost(&usedRdLock, OS_OPT_POST_NONE, &err);								//Release locks
+	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+	OSMutexPost(&wayPtLock, OS_OPT_POST_NONE, &err);
+	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+}
+
+/* Let user select their car */
+void SelectVehicle(GLIB_Context_t* lcdContext) {
+	uint8_t ctr = 0;
+	RTOS_ERR err;
+	CPU_TS timestamp;
+	OS_FLAGS flags;
+
+	PrintVehicleSelect(lcdContext, ctr);
+	while(1) {
+		flags = OSFlagPend(&btnEventFlags, BTN_FLG_ANY, 0u, OS_OPT_PEND_FLAG_SET_ANY | OS_OPT_PEND_BLOCKING, &timestamp, &err);
+		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+		OSFlagPost(&btnEventFlags, flags, OS_OPT_POST_FLAG_CLR, &err);
+
+		if(flags & BTN0_PRESS) {
+			ctr = (ctr + 1) % NUM_VEHICLES;
+			PrintVehicleSelect(lcdContext, ctr);
+		}
+		else if(flags & BTN1_PRESS) {
+			break;
+		}
+	}
+
+	selections.vehicle = ctr + 1;
+	switch(selections.vehicle) {
+		case SportsCar:
+			vehSpecs = (VehSpecs_t) SPORTS_CAR_SPECS;
+			break;
+		case MiniVan:
+			vehSpecs = (VehSpecs_t) MINI_VAN_SPECS;
+			break;
+		case Truck:
+			vehSpecs = (VehSpecs_t) SEMI_SPECS;
+			break;
+	}
+ }
+
+GameState_t GameResetSelect(GLIB_Context_t* lcdContext) {
+	CPU_TS timestamp;
+	RTOS_ERR err;
+	OS_FLAGS flags;
+	uint8_t ctr;
+
+	PrintGameRestartSelect(lcdContext, ctr);
+	while(1) {
+		flags = OSFlagPend(&btnEventFlags, BTN_FLG_ANY, 0u, OS_OPT_PEND_FLAG_SET_ANY | OS_OPT_PEND_BLOCKING, &timestamp, &err);
+		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+		OSFlagPost(&btnEventFlags, flags, OS_OPT_POST_FLAG_CLR, &err);
+
+		if(flags & BTN0_PRESS) {
+			ctr = (ctr + 1) % NUM_RESTART_OPTS;
+			PrintGameRestartSelect(lcdContext, ctr);
+		}
+		else if(flags & BTN1_PRESS) {
+			break;
+		}
+	}
+
+	if(ctr) {
+		ResetStateVars();
+
+		OSMutexPend(&gameStLock, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);
+		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+		gameState = GameStart;
+		OSMutexPost(&gameStLock, OS_OPT_POST_NONE, &err);
+		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+
+		return GameStart;
+	}
+	else {
+		ReloadStateVars();
+
+		OSMutexPend(&gameStLock, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);
+		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+		gameState = GamePlay;
+		OSMutexPost(&gameStLock, OS_OPT_POST_NONE, &err);
+		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+
+		return GamePlay;
+	}
+}
+
+// Initialize the waypoint FIFOs
+void InitRoadFIFOs(void) {
+	RTOS_ERR err;
+	CPU_TS timestamp;
+
+	OSMutexPend(&usedRdLock, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);
+	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+	OSMutexPend(&wayPtLock, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);
+	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+
+	road.waypoints.totalWayPts = 5;
+	usedRoad.waypoints.totalWayPts = 5;
+
+	for(int i = 0; i < 5; i++) {
+		FIFO_Append(&road.waypoints, 0, true);
+	}
+
+	OSMutexPost(&usedRdLock, OS_OPT_POST_NONE, &err);								//Release locks
+	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+	OSMutexPost(&wayPtLock, OS_OPT_POST_NONE, &err);
+	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+}
+
+// Initialize waypoint FIFOs
+void ResetStateVars(void) {
+	vehState = (VehSt_T){ .vehDir = Straight,
+						  .xPos = 0,
+						  .yPos = 0,
+	                      .circX = 0,
+	                      .circY = 0,
+	                      .radius = 0,
+						  .angle = 90,
+	                      .prcntSlip = 0 };
+	vehPhys = (VehPhys_t) { .accelSd = 0,
+	                        .accelFwd = 0,
+	                        .velocity = 0,
+	                        .power = 0,
+	                        .zAccel = 0,
+	                        .bankAngle = 0,
+	                        .roll = 0 };
+	gameStats = (GameStats_t) { .distance = 0,
+	                            .sumOfSpeeds = 0,
+	                            .numSums = 0,
+	                            .gameResult = Finished,
+								.startTime = 0,
+								.wayPtsPassed = 0};
+
+	RTOS_ERR err;
+	CPU_TS timestamp;
+	OSMutexPend(&wayPtLock, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);
+	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+	FIFO_Clear(&road.waypoints);
+	OSMutexPost(&wayPtLock, OS_OPT_POST_NONE, &err);
+	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+	InitRoadFIFOs();
+}
+
+void ReloadStateVars(void) {
+	RTOS_ERR err;
+	CPU_TS timestamp;
+
+	OSMutexPend(&vehStLock, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);
+	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+	vehState = (VehSt_T){ .vehDir = Straight,
+						  .xPos = 0,
+						  .yPos = 0,
+						  .circX = 0,
+						  .circY = 0,
+						  .radius = 0,
+						  .angle = 90,
+						  .prcntSlip = 0 };
+	OSMutexPost(&vehStLock, OS_OPT_POST_NONE, &err);
+	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+
+	OSMutexPend(&physTupLk, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);
+	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+	vehPhys = (VehPhys_t) { .accelSd = 0,
+							.accelFwd = 0,
+							.velocity = 0,
+							.power = 0,
+							.zAccel = 0,
+							.bankAngle = 0,
+							.roll = 0 };
+	OSMutexPost(&physTupLk, OS_OPT_POST_NONE, &err);
+	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+
+	gameStats = (GameStats_t) { .distance = 0,
+								.sumOfSpeeds = 0,
+								.numSums = 0,
+								.gameResult = Finished,
+								.startTime = 0,
+								.wayPtsPassed = 0};
+
+	OSMutexPend(&wayPtLock, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);
+	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+	FIFO_Clear(&road.waypoints);
+	OSMutexPost(&wayPtLock, OS_OPT_POST_NONE, &err);
+	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+	InitRoadFIFOs();
+
+	OSMutexPend(&usedRdLock, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);
+	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+	OSMutexPend(&wayPtLock, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);
+	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+
+	road.roadWidth  = (NUM_DIFFICULTIES - selections.difficulty - 1) * 5 + 15;
+	if(selections.gameMode == TimeTrial) {
+		usedRoad.waypoints.totalWayPts = (selections.difficulty + 1) * 25;
+		road.waypoints.totalWayPts = (selections.difficulty + 1) * 25;
+		road.numWayPts = road.waypoints.totalWayPts + 5;
+	}
+	else {
+		usedRoad.waypoints.totalWayPts = 0xFFFF;
+		road.waypoints.totalWayPts = 0xFFFF;
+		road.numWayPts = 0xFFFF;
+	}
+
+	OSMutexPost(&usedRdLock, OS_OPT_POST_NONE, &err);
+	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+	OSMutexPost(&wayPtLock, OS_OPT_POST_NONE, &err);
+	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 }

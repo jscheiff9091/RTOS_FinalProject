@@ -20,6 +20,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdbool.h>
 
 #include "display.h"
 #include "glib.h"
@@ -158,6 +159,7 @@ void StartTask(void* p_arg) {
 	OSMutexCreate(&usedRdLock, "Used Road Waypoints FIFO Mutex", &err);
 	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
 
+	ResetStateVars();
 
 	/**** Create all timers used ****/
 	//Create intermittent LED warning timer
@@ -343,7 +345,7 @@ void RoadGenerateTask(void* p_args) {
 				fifoFull = true;																	//Fifo full or all waypoints for a level have been created
 			}
 			else {																					//More waypoints needed
-				xDiff = GET_XDIFF;																	//Get the x-offset from the previous waypoint
+				xDiff = GET_XDIFF((selections.difficulty + 1));										//Get the x-offset from the previous waypoint
 				FIFO_Append(&road.waypoints, xDiff, USE_X_DIFF);									//Add new waypoint to the queue
 			}
 			OSMutexPost(&wayPtLock, OS_OPT_POST_NONE, &err);
@@ -453,6 +455,7 @@ void SpeedUpdateTask(void* p_args) {
 	OS_FLAGS btnFlags;
 	GameState_t tempState;
 	double accel = 0;
+	bool firstPress = true;
 
 	GPIO_InitBTNs();															//Enable push buttons
 
@@ -467,17 +470,13 @@ void SpeedUpdateTask(void* p_args) {
 		OSMutexPost(&gameStLock, OS_OPT_POST_NONE, &err);
 		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 
-		if(tempState == GameStart) {
-			if(btnFlags & BTN0_PRESS) {
-				OSMutexPend(&gameStLock, 0u, OS_OPT_PEND_BLOCKING, &timestamp, &err);
-				APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
-				gameState = GamePlay;														//Update local copy of variable
-				OSMutexPost(&gameStLock, OS_OPT_POST_NONE, &err);
-				APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
-			}
-		}
-		else {
+		if(tempState == GamePlay){
 			if(btnFlags & BTN0_PRESS) {														//Button 0 pressed
+				if(selections.gameMode == TimeTrial && firstPress) {
+					gameStats.startTime = OSTimeGet(&err);
+					APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+					firstPress = false;
+				}
 				if(accel < 1) { 															//Open throttle by 5%
 					accel += .05;
 				}
@@ -529,6 +528,9 @@ void SpeedUpdateTask(void* p_args) {
 					APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 				}
 			}
+		}
+		else if(tempState == GameEnd) {
+			firstPress = true;
 		}
 
 		OSFlagPost(&btnEventFlags, btnFlags, OS_OPT_POST_FLAG_CLR, &err);		//Clear button event flag
@@ -714,47 +716,72 @@ void LCDDisplayTask(void* p_args) {
 	car.yMin = CAR_YMIN;
 	car.yMax = CAR_YMAX;
 
-	PrintGameInit(&glibContext);
 	//Initialize road array
 	size = DrawWaypoints(&glibContext, wayPtArray, size, false);
 
 	while(1) {
-		while(tempState != GamePlay) {
-			OSTimeDly(100u, OS_OPT_TIME_DLY, &err);
+		if(tempState == GameStart) {
+			SelectGameMode(&glibContext);											//User selects game modes with buttons
+			SelectDifficulty(&glibContext);											//User selects difficulty
+			SelectVehicle(&glibContext);											//User selects vehicle
+			PrintGameInit(&glibContext);											//Print selections and wait for confirmation/stallwhile waypoint FIFO gets filled
+
+			flags = OSFlagPend(&btnEventFlags, BTN1_PRESS, 0u, OS_OPT_PEND_FLAG_SET_ANY | OS_OPT_PEND_BLOCKING, &timestamp, &err); //Wait for user to press B0 to advance to game
 			APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 
 			OSMutexPend(&gameStLock, 0u, OS_OPT_PEND_BLOCKING, &timestamp, &err);
 			APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+			gameState = GamePlay;													//Update global state variable
 			tempState = gameState;													//Update local copy of variable
 			OSMutexPost(&gameStLock, OS_OPT_POST_NONE, &err);
 			APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 		}
 
-		flags = OSFlagPend(&lcdFlags, LCD_FLAG_ANY, 0, OS_OPT_PEND_BLOCKING | OS_OPT_PEND_FLAG_SET_ANY, &timestamp, &err);
-		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
-
-		if(flags & NEW_SHIFT_MESSAGE) {
-			GLIB_clear(&glibContext);									//Clear Waypoints
-			GLIB_drawRect(&glibContext, &car);							//Draw Vehicle
-			DrawVehicleDirLine(&glibContext);							//Draw Vehicle direction
-			size = DrawWaypoints(&glibContext, wayPtArray, size, true);	//Draw Waypoints/update road fifos
-			PrintVehicleState(&glibContext);							//Print velocity and acceleration
-			DMD_updateDisplay();										//Update LCD with changes
-
-			OSFlagPost(&lcdFlags, flags, OS_OPT_POST_FLAG_CLR, &err);
+		while(tempState == GamePlay) {
+			flags = OSFlagPend(&lcdFlags, LCD_FLAG_ANY, 0, OS_OPT_PEND_BLOCKING | OS_OPT_PEND_FLAG_SET_ANY, &timestamp, &err);
 			APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+
+			if(flags & NEW_SHIFT_MESSAGE) {
+				GLIB_clear(&glibContext);									//Clear Waypoints
+				GLIB_drawRect(&glibContext, &car);							//Draw Vehicle
+				DrawVehicleDirLine(&glibContext);							//Draw Vehicle direction
+				size = DrawWaypoints(&glibContext, wayPtArray, size, true);	//Draw Waypoints/update road fifos
+				PrintVehicleState(&glibContext);							//Print velocity and acceleration
+				DMD_updateDisplay();										//Update LCD with changes
+
+				OSFlagPost(&lcdFlags, flags, OS_OPT_POST_FLAG_CLR, &err);
+				APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+
+				OSMutexPend(&gameStLock, 0u, OS_OPT_PEND_BLOCKING, &timestamp, &err);
+				APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+				tempState = gameState;													//Update local copy of variable
+				OSMutexPost(&gameStLock, OS_OPT_POST_NONE, &err);
+				APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+			}
+			else if(flags & GAME_OVER) {
+				GLIB_clear(&glibContext);
+				PrintGameOverStatus(&glibContext);
+				DMD_updateDisplay();
+
+				OSFlagPost(&lcdFlags, flags, OS_OPT_POST_FLAG_CLR, &err);
+				APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+
+				OSMutexPend(&gameStLock, 0u, OS_OPT_PEND_BLOCKING, &timestamp, &err);
+				APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+				gameState = GameEnd;													//Update local copy of variable
+				tempState = gameState;
+				OSMutexPost(&gameStLock, OS_OPT_POST_NONE, &err);
+				APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+			}
 		}
-		else if(flags & GAME_OVER) {
-			GLIB_clear(&glibContext);
-			PrintGameOverStatus(&glibContext);
-			DMD_updateDisplay();
 
-			OSMutexPend(&gameStLock, 0u, OS_OPT_PEND_BLOCKING, &timestamp, &err);
+		if(tempState == GameEnd) {
+			OSFlagPend(&btnEventFlags, BTN1_PRESS, 0, OS_OPT_PEND_FLAG_SET_ANY | OS_OPT_PEND_BLOCKING, &timestamp, &err);
 			APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
-			gameState = GameEnd;													//Update local copy of variable
-			tempState = gameState;
-			OSMutexPost(&gameStLock, OS_OPT_POST_NONE, &err);
-			APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+
+			tempState = GameResetSelect(&glibContext);
+			size = 0;
+			size = DrawWaypoints(&glibContext, wayPtArray, size, false);
 		}
 	}
 }
@@ -768,91 +795,95 @@ void GameMonitorTask(void* p_args) {
 	//bool slipWarn = false;
 	bool headWarn = false;
 	OS_FLAGS flags;
+	GameState_t tempState;
 
 	while(1) {
-//		while(tempState != GamePlay) {												//Don't do anything unless game is being played
-//			OSTimeDly(500u, OS_OPT_TIME_DLY, &err);									//Sleep
-//			APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
-//
-//			OSMutexPend(&gameStLock, 0u, OS_OPT_PEND_BLOCKING, &timestamp, &err);
-//			APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
-//			tempState = gameState;													//Update local copy of variable
-//			OSMutexPost(&gameStLock, OS_OPT_POST_NONE, &err);
-//			APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
-//		}
-		OSSemPend(&gmMonSem, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);
+		OSMutexPend(&gameStLock, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);
+		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+		tempState = gameState;
+		OSMutexPost(&gameStLock, OS_OPT_POST_NONE, &err);
 		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 
-		flags = OSFlagPost(&lcdFlags, 0, OS_OPT_POST_FLAG_CLR, &err);					//Get game status
-		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
-
-		if(!(flags & GAME_OVER)) {
-			/* Compute and send the shift message */
-			OSMutexPend(&vehStLock, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);			//Compute the change in Position
-			APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
-			localXPos = vehState.xPos;
-			localYPos = vehState.yPos;
-			OSMutexPost(&vehStLock, OS_OPT_POST_NONE, &err);
+		if(tempState == GamePlay) {
+			OSSemPend(&gmMonSem, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);
 			APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 
-
-			/* Check if new vehicle position is out of bounds */
-			OSMutexPend(&usedRdLock, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);
-			APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
-			if((usedRoad.waypoints.head->next != NULL) && (localYPos > usedRoad.waypoints.head->next->yPos)) {		//This is so ugly, it is checking if vehicle has passed the next waypoint yet
-				FIFO_Pop(&usedRoad.waypoints);
-			}
-			if(usedRoad.waypoints.currWayPts == 1) {
-				OSFlagPost(&lcdFlags, GAME_OVER, OS_OPT_POST_FLAG_SET, &err);
-				APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
-			}
-			OSMutexPost(&usedRdLock, OS_OPT_POST_NONE, &err);
-			APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
-			if(OutsideBoundary(localXPos, localYPos)) {												//Check if the vehicle has left the road
-				gameStats.gameResult = LeftRoad;
-				OSFlagPost(&lcdFlags, GAME_OVER, OS_OPT_POST_FLAG_SET, &err);
-				APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
-				OSFlagPost(&ledWarnFlags, VEH_OFF_ROAD | VEH_HEAD_WARN_CLR, OS_OPT_POST_FLAG_SET, &err);
-				APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
-			}
-			else {
-				OSFlagPost(&lcdFlags, NEW_SHIFT_MESSAGE, OS_OPT_POST_FLAG_SET, &err);				//Notify LCD task to update display
-				APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
-			}
-
-			/* Check if vehicle is on course to go off couse within 30m */
-			headWarn = TrendingOut(localXPos, localYPos);
-			if(headWarn) {													//If trending out set LED blink flag
-				OSFlagPost(&ledWarnFlags, VEH_HEAD_WARN, OS_OPT_POST_FLAG_SET, &err);
-				APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
-			}
-			else {																		//If not trending out and flag was set, clear the LED blink flag
-				OSFlagPost(&ledWarnFlags, VEH_HEAD_WARN_CLR, OS_OPT_POST_FLAG_SET, &err);
-				APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
-			}
-
-			/* Check slip warnings */
-			flags = OSFlagPost(&ledWarnFlags, 0, OS_OPT_POST_FLAG_SET, &err);
+			flags = OSFlagPost(&lcdFlags, 0, OS_OPT_POST_FLAG_CLR, &err);					//Get game status
 			APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 
-			OSMutexPend(&vehStLock, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);
-			APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
-			if(vehState.prcntSlip > (.9 * VEH_SLIP_TOLERANCE) && !(flags & TIRE_SLIP_WARN)) {							//Slip percent greater than 90% of the tolerated slip
-					OSFlagPost(&ledWarnFlags, TIRE_SLIP_WARN, OS_OPT_POST_FLAG_SET, &err);
+			if(!(flags & GAME_OVER)) {
+				/* Compute and send the shift message */
+				OSMutexPend(&vehStLock, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);			//Compute the change in Position
+				APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+				localXPos = vehState.xPos;
+				localYPos = vehState.yPos;
+				OSMutexPost(&vehStLock, OS_OPT_POST_NONE, &err);
+				APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+
+
+				/* Check if new vehicle position is out of bounds */
+				OSMutexPend(&usedRdLock, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);
+				APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+				if((usedRoad.waypoints.head->next != NULL) && (localYPos > usedRoad.waypoints.head->next->yPos)) {		//This is so ugly, it is checking if vehicle has passed the next waypoint yet
+					FIFO_Pop(&usedRoad.waypoints);
+					gameStats.wayPtsPassed++;
+				}
+				if(usedRoad.waypoints.currWayPts == 1) {
+					OSFlagPost(&lcdFlags, GAME_OVER, OS_OPT_POST_FLAG_SET, &err);
 					APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
-			}
-			else if(vehState.prcntSlip < (.9 * VEH_SLIP_TOLERANCE) && (flags & TIRE_SLIP_WARN)) {						//Tire no longer slipping, clear flag
-					OSFlagPost(&ledWarnFlags, TIRE_SLIP_WARN_CLR, OS_OPT_POST_FLAG_SET, &err);
+				}
+				OSMutexPost(&usedRdLock, OS_OPT_POST_NONE, &err);
+				APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+				if(OutsideBoundary(localXPos, localYPos)) {												//Check if the vehicle has left the road
+					gameStats.gameResult = LeftRoad;
+					OSFlagPost(&lcdFlags, GAME_OVER, OS_OPT_POST_FLAG_SET, &err);
 					APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
-			}
-			else if(vehState.prcntSlip > VEH_SLIP_TOLERANCE) {															//Tire slip exceeded tolerated limit
-				gameStats.gameResult = SpunOut;
-				OSFlagPost(&lcdFlags, GAME_OVER, OS_OPT_POST_FLAG_SET, &err);
+					OSFlagPost(&ledWarnFlags, VEH_OFF_ROAD | VEH_HEAD_WARN_CLR, OS_OPT_POST_FLAG_SET, &err);
+					APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+				}
+				else {
+					OSFlagPost(&lcdFlags, NEW_SHIFT_MESSAGE, OS_OPT_POST_FLAG_SET, &err);				//Notify LCD task to update display
+					APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+				}
+
+				/* Check if vehicle is on course to go off couse within 30m */
+				headWarn = TrendingOut(localXPos, localYPos);
+				if(headWarn) {													//If trending out set LED blink flag
+					OSFlagPost(&ledWarnFlags, VEH_HEAD_WARN, OS_OPT_POST_FLAG_SET, &err);
+					APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+				}
+				else {																		//If not trending out and flag was set, clear the LED blink flag
+					OSFlagPost(&ledWarnFlags, VEH_HEAD_WARN_CLR, OS_OPT_POST_FLAG_SET, &err);
+					APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+				}
+
+				/* Check slip warnings */
+				flags = OSFlagPost(&ledWarnFlags, 0, OS_OPT_POST_FLAG_SET, &err);
 				APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
-				OSFlagPost(&ledWarnFlags, TIRE_OFF_ROAD | TIRE_SLIP_WARN_CLR, OS_OPT_POST_FLAG_SET, &err);
+
+				OSMutexPend(&vehStLock, 0, OS_OPT_PEND_BLOCKING, &timestamp, &err);
+				APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+				if(vehState.prcntSlip > (.9 * VEH_SLIP_TOLERANCE) && !(flags & TIRE_SLIP_WARN)) {							//Slip percent greater than 90% of the tolerated slip
+						OSFlagPost(&ledWarnFlags, TIRE_SLIP_WARN, OS_OPT_POST_FLAG_SET, &err);
+						APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+				}
+				else if(vehState.prcntSlip < (.9 * VEH_SLIP_TOLERANCE) && (flags & TIRE_SLIP_WARN)) {						//Tire no longer slipping, clear flag
+						OSFlagPost(&ledWarnFlags, TIRE_SLIP_WARN_CLR, OS_OPT_POST_FLAG_SET, &err);
+						APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+				}
+				else if(vehState.prcntSlip > VEH_SLIP_TOLERANCE) {															//Tire slip exceeded tolerated limit
+					gameStats.gameResult = SpunOut;
+					OSFlagPost(&lcdFlags, GAME_OVER, OS_OPT_POST_FLAG_SET, &err);
+					APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+					OSFlagPost(&ledWarnFlags, TIRE_OFF_ROAD | TIRE_SLIP_WARN_CLR, OS_OPT_POST_FLAG_SET, &err);
+					APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+				}
+				OSMutexPost(&vehStLock, OS_OPT_POST_NONE, &err);
 				APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 			}
-			OSMutexPost(&vehStLock, OS_OPT_POST_NONE, &err);
+		}
+		else {
+			OSTimeDly(500u, OS_OPT_TIME_DLY, &err);
 			APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 		}
 	}

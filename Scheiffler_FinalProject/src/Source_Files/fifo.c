@@ -75,3 +75,10 @@ bool FIFO_IsEmpty(WayPtFIFO_t* fifo) {
 	}
 	else return false;										//Head and tail != NULL -> not empty
 }
+
+// ----- FIFO Clear ----
+void FIFO_Clear(WayPtFIFO_t* fifo) {
+	while(!FIFO_IsEmpty(fifo)) {
+		FIFO_Pop(fifo);
+	}
+}
