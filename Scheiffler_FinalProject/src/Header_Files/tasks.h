@@ -34,7 +34,7 @@
 #define SPD_STACK_SIZE			1000u
 #define SPD_TASK_DLY			100u
 
-#define LED_TASK_PRIO 			17u    //Low
+#define LED_TASK_PRIO 			16u    //Low
 #define LED_STACK_SIZE			1000u
 #define	LED_TASK_DLY			100u
 
@@ -44,7 +44,7 @@
 #define GMMON_TASK_PRIO			14u
 #define GMMON_STACK_SIZE		1000u
 
-#define LCD_TASK_PRIO			16u     //Higher than LED
+#define LCD_TASK_PRIO			17u     //Higher than LED
 #define LCD_STACK_SIZE			1000u
 
 // Miscellaneous macros
@@ -117,5 +117,11 @@ void LCDDisplayTask(void* p_args);
 ///
 /// @param[in] Task arguments
 void IdleTask(void* p_args);
+
+/// @brief Clear flags, semaphores, and mutexes, close all tasks not used in menus.
+void CleanOS(void);
+
+/// @brief Restart all tasks after user has made their end of game selections
+void RestartOS(void);
 
 #endif /* TASKS_H_ */

@@ -123,7 +123,7 @@ void GPIO_EVEN_IRQHandler(void) {
 
 	uint32_t gpioInt = GPIO_IntGet();				//Read IF register
 	GPIO_IntClear(gpioInt);							//Set IFC register
-	for(int i = 0; i < 10000; i++);     		 	//Button Debounce
+	for(int i = 0; i < 40000; i++);     		 	//Button Debounce
 
 	RTOS_ERR err;
 

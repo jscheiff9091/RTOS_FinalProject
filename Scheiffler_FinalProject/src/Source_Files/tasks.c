@@ -458,6 +458,7 @@ void SpeedUpdateTask(void* p_args) {
 	bool firstPress = true;
 
 	GPIO_InitBTNs();															//Enable push buttons
+	OSFlagPost(&btnEventFlags, BTN_FLG_ANY, OS_OPT_POST_FLAG_CLR, &err);
 
 	while(1) {
 		// Wait to be signaled by button ISR
@@ -529,9 +530,6 @@ void SpeedUpdateTask(void* p_args) {
 				}
 			}
 		}
-		else if(tempState == GameEnd) {
-			firstPress = true;
-		}
 
 		OSFlagPost(&btnEventFlags, btnFlags, OS_OPT_POST_FLAG_CLR, &err);		//Clear button event flag
 	}
@@ -571,9 +569,15 @@ void LEDWarningTask(void* p_args) {
 		//Check speed warning light events
 		if(ledStatusFlags & VEH_OFF_ROAD) {
 			GPIO_PinOutSet(LED1_PORT, LED1_PIN);
+			while(1) {
+				OSTimeDly(5000u, OS_OPT_TIME_DLY, &err);
+			}
 		}
 		else if(ledStatusFlags & TIRE_OFF_ROAD) {
 			GPIO_PinOutSet(LED0_PORT, LED0_PIN);
+			while(1) {
+				OSTimeDly(5000u, OS_OPT_TIME_DLY, &err);
+			}
 		}
 		else {
 			if(ledStatusFlags & TIRE_SLIP_WARN){
@@ -759,6 +763,7 @@ void LCDDisplayTask(void* p_args) {
 				APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 			}
 			else if(flags & GAME_OVER) {
+				CleanOS();
 				GLIB_clear(&glibContext);
 				PrintGameOverStatus(&glibContext);
 				DMD_updateDisplay();
@@ -766,22 +771,20 @@ void LCDDisplayTask(void* p_args) {
 				OSFlagPost(&lcdFlags, flags, OS_OPT_POST_FLAG_CLR, &err);
 				APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 
-				OSMutexPend(&gameStLock, 0u, OS_OPT_PEND_BLOCKING, &timestamp, &err);
-				APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 				gameState = GameEnd;													//Update local copy of variable
 				tempState = gameState;
-				OSMutexPost(&gameStLock, OS_OPT_POST_NONE, &err);
-				APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 			}
 		}
 
 		if(tempState == GameEnd) {
 			OSFlagPend(&btnEventFlags, BTN1_PRESS, 0, OS_OPT_PEND_FLAG_SET_ANY | OS_OPT_PEND_BLOCKING, &timestamp, &err);
 			APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+			OSFlagPost(&btnEventFlags, BTN1_PRESS, OS_OPT_POST_FLAG_CLR, &err);
 
 			tempState = GameResetSelect(&glibContext);
 			size = 0;
 			size = DrawWaypoints(&glibContext, wayPtArray, size, false);
+			RestartOS();
 		}
 	}
 }
@@ -902,3 +905,150 @@ void IdleTask(void* p_args) {
 	}
 }
 
+/* Clean OS */
+void CleanOS(void) {
+	RTOS_ERR err;
+
+	OSSchedLock(&err);
+	OSFlagPost(&dirChngFlags, DIRCHG_ANY, OS_OPT_POST_FLAG_CLR, &err);			//Clear all flags
+	OSFlagPost(&ledWarnFlags, LED_FLAGS_ALL, OS_OPT_POST_FLAG_CLR, &err);
+	OSFlagPost(&lcdFlags, LCD_FLAG_ANY, OS_OPT_POST_FLAG_CLR, &err);
+	OSFlagPost(&btnEventFlags, BTN_FLG_ANY, OS_OPT_POST_FLAG_CLR, &err);
+
+	OSSemPendAbort(&physModSem, OS_OPT_PEND_ABORT_ALL, &err);					//Clear all semaphores
+	OSSemPendAbort(&gmMonSem, OS_OPT_PEND_ABORT_ALL, &err);
+
+	OSMutexPendAbort(&vehStLock, OS_OPT_PEND_ABORT_ALL, &err);					//Clear all mutexes
+	OSMutexPendAbort(&physTupLk, OS_OPT_PEND_ABORT_ALL, &err);
+	OSMutexPendAbort(&wayPtLock, OS_OPT_PEND_ABORT_ALL, &err);
+	OSMutexPendAbort(&usedRdLock, OS_OPT_PEND_ABORT_ALL, &err);
+	OSMutexPendAbort(&gameStLock, OS_OPT_PEND_ABORT_ALL, &err);
+
+	OSTaskDel(&rdGenTaskTCB, &err);												//Close all tasks not being used in menus
+	OSTaskDel(&dirTaskTCB, &err);
+	OSTaskDel(&physModTaskTCB, &err);
+	OSTaskDel(&spdTaskTCB, &err);
+	OSTaskDel(&ledTaskTCB, &err);
+	OSTaskDel(&vehStTaskTCB, &err);
+	OSTaskDel(&gmMonTaskTCB, &err);
+
+	OSSchedUnlock(&err);
+}
+
+/* Restart OS */
+void RestartOS(void) {
+	RTOS_ERR err;
+
+	//Create the road generation task
+	OSTaskCreate(&rdGenTaskTCB,
+				 "Road Generation Task",
+				 RoadGenerateTask,
+				 DEF_NULL,
+				 RDGEN_TASK_PRIO,
+				 &rdGenTaskStack[0],
+				 (RDGEN_STACK_SIZE / 2u),
+				 RDGEN_STACK_SIZE,
+				 0u,
+				 0u,
+				 DEF_NULL,
+				 OS_OPT_TASK_STK_CLR,
+				 &err);
+	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+
+	//Create slider input task
+	OSTaskCreate(&dirTaskTCB,
+				 "Direction Update Task",
+				 DirectionUpdateTask,
+				 DEF_NULL,
+				 DIR_TASK_PRIO,
+				 &dirTaskStack[0],
+				 (DIR_STACK_SIZE / 2u),
+				 DIR_STACK_SIZE,
+				 0u,
+				 0u,
+				 DEF_NULL,
+				 OS_OPT_TASK_STK_CLR,
+				 &err);
+	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+
+	//Create the road generation task
+	OSTaskCreate(&physModTaskTCB,
+				 "Physics Model Update Task",
+				 PhysicsModelTask,
+				 DEF_NULL,
+				 RDGEN_TASK_PRIO,
+				 &physModTaskStack[0],
+				 (PHYSMOD_STACK_SIZE / 2u),
+				 PHYSMOD_STACK_SIZE,
+				 0u,
+				 0u,
+				 DEF_NULL,
+				 OS_OPT_TASK_STK_CLR,
+				 &err);
+	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+
+	//Create button input task
+	OSTaskCreate(&spdTaskTCB,
+				 "Speed Update Task",
+				 SpeedUpdateTask,
+				 DEF_NULL,
+				 SPD_TASK_PRIO,
+				 &spdTaskStack[0],
+				 (SPD_STACK_SIZE / 2u),
+				 SPD_STACK_SIZE,
+				 0u,
+				 0u,
+				 DEF_NULL,
+				 OS_OPT_TASK_STK_CLR,
+				 &err);
+	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+
+	//Create LED Warning task
+	OSTaskCreate(&ledTaskTCB,
+				 "LED Warning Task",
+				 LEDWarningTask,
+				 DEF_NULL,
+				 LED_TASK_PRIO,
+				 &ledTaskStack[0],
+				 (LED_STACK_SIZE / 2u),
+				 LED_STACK_SIZE,
+				 0u,
+				 0u,
+				 DEF_NULL,
+				 OS_OPT_TASK_STK_CLR,
+				 &err);
+	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+
+
+	//Create Vehicle State Update task
+	OSTaskCreate(&vehStTaskTCB,
+				 "Vehicle State Update Task",
+				 VehicleStateTask,
+				 DEF_NULL,
+				 VEHST_TASK_PRIO,
+				 &vehStTaskStack[0],
+				 (VEHST_STACK_SIZE / 2u),
+				 VEHST_STACK_SIZE,
+				 0u,
+				 0u,
+				 DEF_NULL,
+				 OS_OPT_TASK_STK_CLR,
+				 &err);
+	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+
+	//Create Game Monitor task
+	OSTaskCreate(&gmMonTaskTCB,
+				 "Game Monitor Task",
+				 GameMonitorTask,
+				 DEF_NULL,
+				 GMMON_TASK_PRIO,
+				 &gmMonTaskStack[0],
+				 (GMMON_STACK_SIZE / 2u),
+				 GMMON_STACK_SIZE,
+				 0u,
+				 0u,
+				 DEF_NULL,
+				 OS_OPT_TASK_STK_CLR,
+				 &err);
+	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+}
